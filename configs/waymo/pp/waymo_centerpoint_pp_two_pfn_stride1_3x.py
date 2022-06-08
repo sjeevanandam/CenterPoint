@@ -69,7 +69,9 @@ test_cfg = dict(
     score_threshold=0.1,
     pc_range=[-74.88, -74.88],
     out_size_factor=get_downsample_factor(model),
-    voxel_size=[0.32, 0.32]
+    voxel_size=[0.32, 0.32],
+    circular_nms=True,
+    min_radius=[2],
 )
 
 

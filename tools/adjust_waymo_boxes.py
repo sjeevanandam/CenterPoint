@@ -145,6 +145,55 @@ if __name__ == '__main__':
     # Run any user-specified initialization code for their submission.
     model = initialize_model(args)
 
+    pairs = []
+    files = []
+    seq_frames = {}
+    max_sequences_train = 30
+    max_sequences_val = 10
+    
+    files += sort_frames(os.listdir(path))
+    for f in files:
+        frame_num = '_'.join(f[:-4].split('_')[2:4])
+        seq_name = '_'.join(f[:-4].split('_')[:2])
+        if seq_name in seq_frames:
+            seq_frames[seq_name].append(frame_num)
+        else:
+            seq_frames[seq_name] = [frame_num]
+
+    total_sequences = len(seq_frames)
+    processed_sequences = 0
+    selected_sequences = 0
+    
+    processed_sequences_names = []
+    for seq, frames in seq_frames.items():
+        if is_val:
+            if processed_sequences % 2 == 0:
+                processed_sequences += 1
+                selected_sequences += 1
+            else:
+                processed_sequences += 1
+                continue
+            if processed_sequences > total_sequences or selected_sequences >= max_sequences_val+1:
+                break
+        else:
+            if processed_sequences % 2 != 0:
+                processed_sequences += 1
+                selected_sequences += 1
+            else:
+                processed_sequences += 1
+                continue
+            if processed_sequences > total_sequences or selected_sequences >= max_sequences_train+1:
+                break
+        next_frame_idx = 1
+        num_of_frames = len(frames)
+        processed_sequences_names.append(seq)
+        for current_frame_idx in range(num_of_frames):
+            if next_frame_idx == num_of_frames:
+                break
+            pairs.append((path + seq + '_' + frames[current_frame_idx] + '.pkl', path + seq + '_' + frames[next_frame_idx] + '.pkl'))
+            next_frame_idx += 1
+    
+    
     latencies = []
     visual_dicts = {}
     pred_dicts = {}

@@ -4,6 +4,8 @@ from .base import BaseDetector
 from .. import builder
 import torch 
 from torch import nn 
+from tools.utils import collate_intermediate_frame
+
 
 @DETECTORS.register_module
 class TwoStageDetector(BaseDetector):
@@ -143,18 +145,60 @@ class TwoStageDetector(BaseDetector):
                 'box3d_lidar': box_preds,
                 'scores': scores,
                 'label_preds': labels,
-                "metadata": batch_dict["metadata"][index]
+                # "metadata": batch_dict["metadata"][index]
+                "metadata": None
             }
 
             pred_dicts.append(pred_dict)
 
         return pred_dicts 
 
+    def features_from_centers(self, t, out, return_loss=True, **kwargs):
+        if len(out) == 5:
+            one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
+            t['voxel_feature'] = voxel_feature
+        elif len(out) == 3:
+            one_stage_pred, bev_feature, one_stage_loss = out 
+        else:
+            raise NotImplementedError
+
+        # N C H W -> N H W C 
+        if kwargs.get('use_final_feature', False):
+            t['bev_feature'] = final_feature.permute(0, 2, 3, 1).contiguous()
+        else:
+            t['bev_feature'] = bev_feature.permute(0, 2, 3, 1).contiguous()
+        
+        centers_vehicle_frame = self.get_box_center(one_stage_pred)
+
+        if self.roi_head.code_size == 7 and return_loss is True:
+            # drop velocity 
+            t['gt_boxes_and_cls'] = t['gt_boxes_and_cls'][:, :, [0, 1, 2, 3, 4, 5, 6, -1]]
+
+        features = [] 
+
+        for module in self.second_stage:
+            feature = module.forward(t, centers_vehicle_frame, self.num_point)
+            features.append(feature)
+            # feature is two level list 
+            # first level is number of two stage information streams
+            # second level is batch 
+
+        t = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=t, features=features)
+        
+        return t
 
     def forward(self, example, return_loss=True, **kwargs):
         out = self.single_det.forward_two_stage(example, 
             return_loss, **kwargs)
 
+        t1_data, t2_data = collate_intermediate_frame([example['t1'], example['t2']])
+        
+        t1_out = self.single_det.forward_two_stage(t1_data, 
+            return_loss, **kwargs)
+        t2_out = self.single_det.forward_two_stage(t2_data, 
+            return_loss, **kwargs)
+        
+        
         if len(out) == 5:
             one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
             example['voxel_feature'] = voxel_feature
@@ -186,8 +230,13 @@ class TwoStageDetector(BaseDetector):
 
         example = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=example, features=features)
 
+        t1_data = self.features_from_centers(t1_data, t1_out, return_loss, **kwargs)
+        t2_data = self.features_from_centers(t2_data, t2_out, return_loss, **kwargs)
+        
+        frame_history = [t1_data, t2_data]
+        
         # final classification / regression 
-        batch_dict = self.roi_head(example, training=return_loss)
+        batch_dict = self.roi_head(example, frame_history, training=return_loss)
 
         if return_loss:
             roi_loss, tb_dict = self.roi_head.get_loss()

@@ -12,7 +12,8 @@ import open3d as o3d
 import argparse
 import torch
 import time 
-import os 
+import os
+from scipy.spatial.distance import cdist
 
 from det3d.torchie.apis import get_root_logger
 from det3d.torchie import Config
@@ -22,6 +23,7 @@ from det3d.core.bbox import box_np_ops
 voxel_generator = None 
 model = None 
 device = None 
+activation = {}
 
 def initialize_model(args):
     global model, voxel_generator  
@@ -85,13 +87,27 @@ def _process_inputs(points, fp16):
     return inputs 
 
 def run_model(points, fp16=False):
+    activation = {}
+    def get_activation(name):
+        def hook(model, input, output):
+            activation[name] = output.detach()
+        return hook
+    # model.bbox_head.tasks[0].reg[1].register_forward_hook(get_activation('reg'))
+    # model.reader.register_forward_hook(get_activation('reader'))
+    # model.backbone.register_forward_hook(get_activation('backbone'))
+    # model.neck.blocks[2].register_forward_hook(get_activation('blocks'))
+    # model.neck.register_forward_hook(get_activation('neck'))
+    # model.bbox_head.shared_conv.register_forward_hook(get_activation('before_reg'))
+    # model.bbox_head.tasks[0].reg.register_forward_hook(get_activation('after_reg'))
     with torch.no_grad():
         data_dict = _process_inputs(points, fp16)
         outputs = model(data_dict, return_loss=False)[0]
 
+    # print(activation['reader'])
     return {'boxes': outputs['box3d_lidar'].cpu().numpy(),
         'scores': outputs['scores'].cpu().numpy(),
-        'classes': outputs['label_preds'].cpu().numpy()}
+        'classes': outputs['label_preds'].cpu().numpy()}, data_dict, activation['reader']
+
 
 def sort_frames(frames):
     indices = [] 
@@ -109,7 +125,7 @@ def sort_frames(frames):
     return frames
 
 def process_example(points, fp16=False):
-    output = run_model(points, fp16)
+    output, data_dict, inter_features = run_model(points, fp16)
 
     assert len(output) == 3
     assert set(output.keys()) == set(('boxes', 'scores', 'classes'))
@@ -117,7 +133,7 @@ def process_example(points, fp16=False):
     assert output['scores'].shape[0] == num_objs
     assert output['classes'].shape[0] == num_objs
 
-    return output    
+    return output, data_dict, inter_features
 
 
 if __name__ == '__main__':
@@ -144,7 +160,7 @@ if __name__ == '__main__':
     logger = get_root_logger(cfg.log_level)
     # Run any user-specified initialization code for their submission.
     model = initialize_model(args)
-
+    
     latencies = []
     visual_dicts = {}
     pred_dicts = {}
@@ -159,13 +175,14 @@ if __name__ == '__main__':
         frame_num = '_'.join(frame_name[:-4].split('_')[2:4])
         seq_name = '_'.join(frame_name[:-4].split('_')[:2])
         
-        logger.info("Processing {}: {}".format(seq_name, frame_num))
+        logger.info("Processing {}/{}".format(frame_num[-1], total_frames))
 
         pc_name = os.path.join(args.input_data_dir, frame_name)
         # points = pickle.load(open(pc_name, 'rb'))['points']
         points = read_single_waymo(get_obj(pc_name))
 
-        detections = process_example(points, args.fp16)
+        detections, data_dicts, inter_features = process_example(points, args.fp16)
+        
         gt = pickle.load(open(os.path.join(args.annos_data_dir, frame_name), 'rb'))['objects']
         
         gt_boxes = []
@@ -176,47 +193,30 @@ if __name__ == '__main__':
         
         gt_objs = {}
         gt_objs['boxes'] = np.array(gt_boxes, dtype=np.float32)
-        gt_objs['classes'] = np.array(gt_classes, dtype=np.float32)
-        gt_objs['scores'] = np.ones(gt_boxes.__len__(), dtype=np.float32)
         if not gt_objs['boxes'].size == 0:
             gt_objs['boxes'][:, -1] = -np.pi / 2 - gt_objs['boxes'][:, -1]
             gt_objs['boxes'][:, [3, 4]] = gt_objs['boxes'][:, [4, 3]]
             
             gt_objs['classes'] = np.array(gt_classes)
             gt_objs['scores'] = np.ones(gt_boxes.__len__())
-
-
-        # points_mask = np.zeros([points.shape[0]], bool)
-        # points_mask = np.vstack([points_mask]*gt_objs['boxes'].shape[0])
-        # fill_colors = np.broadcast_to(np.array([0, 0, 255]), points[:,:3].shape)
-        # colors = np.asarray(np.copy(fill_colors))
-        # masks = box_np_ops.points_in_rbbox(points, gt_objs['boxes']).T
-        # points_mask |= masks
-        # points_mask = np.bitwise_or.reduce(points_mask, 0)
-        # colors[points_mask == True] = [255, 0, 0]
-        # gt_objs['colors'] = colors
-
-        if args.visual and args.online:
-            pcd = o3d.geometry.PointCloud()
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(points[:, :3])
-
-            visual = [pcd]
-            num_dets = detections['scores'].shape[0]
-            visual += plot_boxes(detections, args.threshold)
-
-            o3d.visualization.draw_geometries(visual)
-        elif args.visual:
-            # visual_dicts.update({frame_num:{'points': points, 'detections': detections, 'detections_gt': gt_objs}})
-
-            # if (counter == total_frames or '_'.join(frames[counter][:-4].split('_')[:2]) != seq_name):
-                
-            logger.info("Saving {}: {}".format(seq_name, frame_num))
-            with open(os.path.join(args.output_dir, frame_name), 'wb') as f:
-                pickle.dump({'points': points, 'detections': detections, 'detections_gt': gt_objs}, f)
-            visual_dicts = {}
+        start_time = time.time()
+        voxels = data_dicts['voxels'].reshape(-1,5).cpu().numpy()
+        voxels_flattened = voxels.reshape(-1,5)[:,:3]
         
+        keypoint_features = []
+        for keypoint in gt_objs['boxes']:
         
+            value = keypoint[:3]
+            idx = cdist(voxels_flattened, np.atleast_2d(value)).argmin()
+            voxel_id = int(np.floor(idx/20))
+            keypoint_features.append(inter_features[voxel_id].cpu().numpy())
+        gt_objs['centerpoint_features'] = np.array(keypoint_features)
+        print(time.time() - start_time)
+        # tree = KDTree(data)
+        # _, idx = tree.query(value)
+        
+        if counter%100 == 0:
+            print(gt_boxes)
         
         
         # pred_dicts.update({frame_name: detections})

@@ -59,12 +59,12 @@ model = dict(
     ],
     roi_head=dict(
         type="RoIHead",
-        input_channels=128*3*5,
+        input_channels=128*3*5*3,
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
-            SHARED_FC=[256, 256],
-            CLS_FC=[256, 256],
-            REG_FC=[256, 256],
+            SHARED_FC=[1920, 256],
+            CLS_FC=[512, 256],
+            REG_FC=[512, 256],
             DP_RATIO=0.3,
 
             TARGET_CONFIG=dict(

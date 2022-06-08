@@ -65,7 +65,7 @@ class WaymoDataset(PointCloudDataset):
 
     def get_sensor_data(self, idx):
         info = self._waymo_infos[idx]
-
+        print("Current ID IS!! {} and frame is {}".format(idx, info['token']))
         res = {
             "lidar": {
                 "type": "lidar",
@@ -86,7 +86,48 @@ class WaymoDataset(PointCloudDataset):
 
         data, _ = self.pipeline(res, info)
 
-        return data
+        seq = info['token'].split('.')[0].split('_')[1]
+        frame = info['token'].split('.')[0].split('_')[3]
+        if int(frame) == 0:
+            # data["frame_history"] = None
+            # return data
+            #previous frame and next frame
+            t1_info = self._waymo_infos[idx+1]
+            t2_info = self._waymo_infos[idx+2]
+            
+            # use transforms on t1 first
+            res["metadata"]["token"] = t1_info["token"] #Just updating token
+            t1_data, _ = self.pipeline(res, t1_info) #applying the transform
+            # now on t2
+            res["metadata"]["token"] = t2_info["token"] #Just updating token
+            t2_data, _ = self.pipeline(res, t2_info) #applying the transform
+            
+            # data["frame_history"] = {
+            #     "t1": t1_data,
+            #     "t2": t2_data
+            # }
+            data["t1"] = t1_data
+            data["t2"] = t2_data
+            return data
+        else:
+            #previous frame and next frame
+            t1_info = self._waymo_infos[idx-1]
+            t2_info = self._waymo_infos[idx+1]
+            
+            # use transforms on t1 first
+            res["metadata"]["token"] = t1_info["token"] #Just updating token
+            t1_data, _ = self.pipeline(res, t1_info) #applying the transform
+            # now on t2
+            res["metadata"]["token"] = t2_info["token"] #Just updating token
+            t2_data, _ = self.pipeline(res, t2_info) #applying the transform
+            
+            # data["frame_history"] = {
+            #     "t1": t1_data,
+            #     "t2": t2_data
+            # }
+            data["t1"] = t1_data
+            data["t2"] = t2_data
+            return data
 
     def __getitem__(self, idx):
         return self.get_sensor_data(idx)

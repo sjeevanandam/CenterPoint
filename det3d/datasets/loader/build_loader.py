@@ -47,7 +47,7 @@ def build_dataloader(
         dataset,
         batch_size=batch_size,
         sampler=sampler,
-        shuffle=(sampler is None),
+        shuffle=(sampler is not None),
         num_workers=num_workers,
         collate_fn=collate_kitti,
         # pin_memory=True,
