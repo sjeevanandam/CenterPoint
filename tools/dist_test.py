@@ -72,10 +72,10 @@ def parse_args():
 
 def main():
 
-    # torch.manual_seed(0)
-    # torch.backends.cudnn.deterministic = True
-    # torch.backends.cudnn.benchmark = False
-    # np.random.seed(0)
+    set_random_seed(0)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
     args = parse_args()
 
@@ -179,7 +179,7 @@ def main():
             )
             if args.local_rank == 0:
                 prog_bar.update()
-
+        break
     synchronize()
 
     all_predictions = all_gather(detections)
