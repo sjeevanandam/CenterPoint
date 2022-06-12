@@ -2,7 +2,9 @@
 **build**
 **egg-info**
 **dist**
-data/
+**dump**
+**data**
+**data1**
 tools/visualization/
 *.pyc
 venv/
@@ -15,3 +17,4 @@ venv/
 *.zip
 *.bin
 .vscode/
+apex/
