@@ -60,7 +60,7 @@ class Matching(torch.nn.Module):
                 'weights': 'indoor',
                 'sinkhorn_iterations': 20,
                 'match_threshold': 0.2,
-                'checkpoint': "/home/jeevanandam/netscratch/thesis/SuperGlue_Waymo/work_dirs/with_no_features_75_train_25_val/model_epoch_20.pth"
+                'checkpoint': "/netscratch/jeevanandam/thesis/SuperGlue_Waymo/work_dirs/with_no_features_75_train_25_val/model_epoch_20.pth"
             }
         }
         self.superglue = SuperGlue(config.get('superglue', {}))
