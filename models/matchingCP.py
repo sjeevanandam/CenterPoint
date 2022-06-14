@@ -44,6 +44,8 @@ import torch
 from .superglueCP import SuperGlue
 from torch.autograd import Variable
 
+import numpy as np
+
 class Matching(torch.nn.Module):
 
     def __init__(self, config={}):
@@ -62,7 +64,7 @@ class Matching(torch.nn.Module):
             }
         }
         self.superglue = SuperGlue(config.get('superglue', {}))
-        
+        self.desc_dim = self.superglue.config['descriptor_dim']
         
         trained = torch.load(config['superglue']['checkpoint'])
         self.superglue.load_state_dict(trained)
@@ -71,61 +73,64 @@ class Matching(torch.nn.Module):
         
         
 
-    def forward(self, data):
+    def forward(self, data, batch_size=1):
         """ Run SuperPoint (optionally) and SuperGlue
         SuperPoint is skipped if ['keypoints0', 'keypoints1'] exist in input
         Args:
           data: dictionary with minimal keys: ['image0', 'image1']
         """
-        pred = {}
         
-        boxes1 = data[0]['rois'][0]
-        boxes2 = data[1]['rois'][0]
+        all_preds = []
         
-        if len(boxes1) <= 1 or len(boxes2) <= 1:
-            # self.logger.info("Time elapsed for one item is (hh:mm:ss.ms) {}".format(time()-start_time))
-            pred = {
-                'keypoints0': torch.zeros([0, 0, 2], dtype=torch.double),
-                'keypoints1': torch.zeros([0, 0, 2], dtype=torch.double),
-                'descriptors0': torch.zeros([0, 2], dtype=torch.double),
-                'descriptors1': torch.zeros([0, 2], dtype=torch.double),
-                'file_name': "frame_pair[0]"
-            }
-        else:
-        
-            kps1 = boxes1[:,:3]
-            kps2 = boxes2[:,:3]
-
+        for batch in range(batch_size):
+            pred = {}
+            boxes1 = data[0]['rois'][batch]
+            boxes2 = data[1]['rois'][batch]
             
-            kps1 = kps1.reshape((1, -1, 3))
-            kps2 = kps2.reshape((1, -1, 3))
+            if len(boxes1) <= 1 or len(boxes2) <= 1:
+                # self.logger.info("Time elapsed for one item is (hh:mm:ss.ms) {}".format(time()-start_time))
+                pred = {
+                    'keypoints0': torch.zeros([0, 0, 2], dtype=torch.double),
+                    'keypoints1': torch.zeros([0, 0, 2], dtype=torch.double),
+                    'descriptors0': torch.zeros([0, 2], dtype=torch.double),
+                    'descriptors1': torch.zeros([0, 2], dtype=torch.double),
+                    'file_name': "frame_pair[0]"
+                }
+            else:
             
-            scores1 = data[0]['roi_scores'][0].unsqueeze(1)
-            scores2 = data[1]['roi_scores'][0].unsqueeze(1)
-            
-            pred = {
-                'keypoints0': list(kps1),
-                'keypoints1': list(kps2),
-                'scores0': list(scores1),
-                'scores1': list(scores2),
-                # 'image0': image,
-                # 'image1': warped,
-                'file_name': "frame_pair[0][0]"
-            }
+                kps1 = boxes1[:,:3]
+                kps2 = boxes2[:,:3]
 
-        # Batch all features
-        # We should either have i) one image per batch, or
-        # ii) the same number of local features for all images in the batch.
-        # data = {**data, **pred}
+                
+                kps1 = kps1.reshape((1, -1, 3))
+                kps2 = kps2.reshape((1, -1, 3))
+                
+                scores1 = data[0]['roi_scores'][0].unsqueeze(1)
+                scores2 = data[1]['roi_scores'][0].unsqueeze(1)
+                
+                pred = {
+                    'keypoints0': list(kps1),
+                    'keypoints1': list(kps2),
+                    'scores0': list(scores1),
+                    'scores1': list(scores2),
+                    # 'image0': image,
+                    # 'image1': warped,
+                    'file_name': "frame_pair[0][0]"
+                }
 
-        for k in pred:
-            if k != 'file_name' and k != 'image0' and k != 'image1' and k != 'test':
-                if type(pred[k]) == torch.Tensor:
-                    pred[k] = Variable(pred[k].cuda())
-                else:
-                    pred[k] = Variable(torch.stack(pred[k]).cuda())
+            # Batch all features
+            # We should either have i) one image per batch, or
+            # ii) the same number of local features for all images in the batch.
+            # data = {**data, **pred}
 
-        # Perform the matching
-        pred = {**self.superglue(pred)}
+            for k in pred:
+                if k != 'file_name' and k != 'image0' and k != 'image1' and k != 'test':
+                    if type(pred[k]) == torch.Tensor:
+                        pred[k] = Variable(pred[k].cuda())
+                    else:
+                        pred[k] = Variable(torch.stack(pred[k]).cuda())
 
-        return pred
+            # Perform the matching
+            pred = {**self.superglue(pred)}
+            all_preds.append(pred)
+        return np.array(all_preds)

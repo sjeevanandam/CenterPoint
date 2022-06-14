@@ -63,8 +63,8 @@ model = dict(
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
             SHARED_FC=[1920, 256],
-            CLS_FC=[512, 256],
-            REG_FC=[512, 256],
+            CLS_FC=[256, 256],
+            REG_FC=[256, 256],
             DP_RATIO=0.3,
 
             TARGET_CONFIG=dict(
