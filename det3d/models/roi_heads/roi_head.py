@@ -140,7 +140,10 @@ class RoIHead(RoIHeadTemplate):
                 frame['roi_features'] = frame_targets_dict['roi_features']
                 frame['roi_scores'] = frame_targets_dict['roi_scores']
                 frame_history_targets.append(frame)
+        else: #fix this later
+            frame_history_targets=frame_history
 
+        
         t_t1_matching = self.matching([batch_dict, frame_history_targets[0]], batch_dict['batch_size']) # doing tit beofre because after nearest map it messes it up
         t_t2_matching = self.matching([batch_dict, frame_history_targets[1]], batch_dict['batch_size'])
         
@@ -158,8 +161,9 @@ class RoIHead(RoIHeadTemplate):
         # RoI aware pooling
         # pooled_features = batch_dict['roi_features'].reshape(-1, 1,
         #     batch_dict['roi_features'].shape[-1]).contiguous()  # (BxN, 1, C)
-		if self.add_box_param:
-        	batch_dict['roi_features'] = torch.cat([batch_dict['roi_features'], batch_dict['rois'], batch_dict['roi_scores'].unsqueeze(-1)], dim=-1)
+        
+        # if self.add_box_param:
+        #     batch_dict['roi_features'] = torch.cat([batch_dict['roi_features'], batch_dict['rois'], batch_dict['roi_scores'].unsqueeze(-1)], dim=-1)
         pooled_features = combined_roi_features.reshape(-1, 1,
             combined_roi_features.shape[-1]).contiguous()  # From (B, N, C) to (BxN, 1, C)
 
