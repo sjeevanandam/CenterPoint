@@ -13,10 +13,6 @@ from det3d.core import box_torch_ops
 
 from ..registry import ROI_HEAD
 
-from models.matchingCP import Matching
-from tools.utils import find_nearest
-import torch
-
 @ROI_HEAD.register_module
 class RoIHead(RoIHeadTemplate):
     def __init__(self, input_channels, model_cfg, num_class=1, code_size=7, add_box_param=False, test_cfg=None):
@@ -43,17 +39,14 @@ class RoIHead(RoIHeadTemplate):
         self.shared_fc_layer = nn.Sequential(*shared_fc_list)
 
         self.cls_layers = self.make_fc_layers(
-            input_channels=pre_channel+256, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
+            input_channels=pre_channel, output_channels=self.num_class, fc_list=self.model_cfg.CLS_FC
         )
         self.reg_layers = self.make_fc_layers(
-            input_channels=pre_channel+256,
+            input_channels=pre_channel,
             output_channels=code_size,
             fc_list=self.model_cfg.REG_FC
         )
         self.init_weights(weight_init='xavier')
-        
-        self.matching = Matching().eval().double()
-        
 
     def init_weights(self, weight_init='xavier'):
         if weight_init == 'kaiming':
@@ -74,51 +67,8 @@ class RoIHead(RoIHeadTemplate):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
         nn.init.normal_(self.reg_layers[-1].weight, mean=0, std=0.001)
-        
-    def nearest_features(self, t1, t, t2, batch_size=1):
-        
-        for batch in range(batch_size):
-            t_t1_indexes = find_nearest(t['rois'][batch][:,:3], t1['rois'][batch][:,:3])
-            t1['rois'][batch] = t1['rois'][batch][t_t1_indexes]
-            t1['roi_labels'][batch] = t1['roi_labels'][batch][t_t1_indexes]
-            t1['roi_features'][batch] = t1['roi_features'][batch][t_t1_indexes]
-            t1['roi_scores'][batch] = t1['roi_scores'][batch][t_t1_indexes]
-            
-            
-            t_t2_indexes = find_nearest(t['rois'][batch][:,:3], t2['rois'][batch][:,:3])
-            t2['rois'][batch] = t2['rois'][batch][t_t2_indexes]
-            t2['roi_labels'][batch] = t2['roi_labels'][batch][t_t2_indexes]
-            t2['roi_features'][batch] = t2['roi_features'][batch][t_t2_indexes]
-            t2['roi_scores'][batch] = t2['roi_scores'][batch][t_t2_indexes]
-            
-        return [t1, t, t2]
-    
-    def combine_roi_features(self, t1, t, t2, batch_size=1):
-        combined_roi_features = t.new_zeros((t.shape[0], t.shape[1], t.shape[2]*3))
-        for batch in range(batch_size):
-            combined_roi_features[batch] = torch.cat((t1[batch], t[batch], t2[batch]), 1)
-        return combined_roi_features
-    
-    def combine_shared_features(self, shared_features, t_t1_matching, t_t2_matching, batch_size=1):
-        
-        combined_shared_features = shared_features.new_zeros((
-                                                                shared_features.shape[0], 
-                                                                shared_features.shape[1], 
-                                                                shared_features.shape[2]  + t_t1_matching[0]['desc0'].shape[1]*4,
-                                                                shared_features.shape[3],
-                                                            ))
-        for batch in range(batch_size):
-            combined_shared_features[batch] = torch.cat((
-                                                    shared_features[batch].permute(2,0,1), 
-                                                    t_t1_matching[batch]['desc0'].permute(0,2,1), 
-                                                    t_t1_matching[batch]['desc1'].permute(0,2,1), 
-                                                    t_t2_matching[batch]['desc0'].permute(0,2,1), 
-                                                    t_t2_matching[batch]['desc1'].permute(0,2,1)
-                                                ), 2).permute(1,2,0)
-        
-        return combined_shared_features.reshape(-1, combined_shared_features.shape[2], combined_shared_features.shape[3]).float().contiguous()
 
-    def forward(self, batch_dict, frame_history=[], training=True):
+    def forward(self, batch_dict, training=True):
         """
         :param input_data: input dict
         :return:
@@ -130,53 +80,18 @@ class RoIHead(RoIHeadTemplate):
             batch_dict['roi_labels'] = targets_dict['roi_labels']
             batch_dict['roi_features'] = targets_dict['roi_features']
             batch_dict['roi_scores'] = targets_dict['roi_scores']
-            
-            frame_history_targets = []
-            for frame in frame_history:
-                frame['batch_size'] = len(frame['rois'])
-                frame_targets_dict = self.assign_targets(frame)
-                frame['rois'] = frame_targets_dict['rois']
-                frame['roi_labels'] = frame_targets_dict['roi_labels']
-                frame['roi_features'] = frame_targets_dict['roi_features']
-                frame['roi_scores'] = frame_targets_dict['roi_scores']
-                frame_history_targets.append(frame)
-        else: #fix this later
-            frame_history_targets=frame_history
 
-        
-        t_t1_matching = self.matching([batch_dict, frame_history_targets[0]], batch_dict['batch_size']) # doing tit beofre because after nearest map it messes it up
-        t_t2_matching = self.matching([batch_dict, frame_history_targets[1]], batch_dict['batch_size'])
-        
-        #resort by finindg nearest point for every point in batch_dict
-        frame_history_targets[0], batch_dict, frame_history_targets[1] = self.nearest_features(
-                                                                                frame_history_targets[0], 
-                                                                                batch_dict, 
-                                                                                frame_history_targets[1], 
-                                                                                batch_dict['batch_size'])
-        combined_roi_features = self.combine_roi_features(frame_history_targets[0]['roi_features'], batch_dict['roi_features'], frame_history_targets[1]['roi_features'], batch_dict['batch_size'])
-        
-        # t_t1_matching = self.matching([batch_dict, frame_history_targets[0]])
-        # t_t2_matching = self.matching([batch_dict, frame_history_targets[1]])
-        
         # RoI aware pooling
-        # pooled_features = batch_dict['roi_features'].reshape(-1, 1,
-        #     batch_dict['roi_features'].shape[-1]).contiguous()  # (BxN, 1, C)
-        
         # if self.add_box_param:
         #     batch_dict['roi_features'] = torch.cat([batch_dict['roi_features'], batch_dict['rois'], batch_dict['roi_scores'].unsqueeze(-1)], dim=-1)
-        pooled_features = combined_roi_features.reshape(-1, 1,
-            combined_roi_features.shape[-1]).contiguous()  # From (B, N, C) to (BxN, 1, C)
+
+        pooled_features = batch_dict['roi_features'].reshape(-1, 1,
+            batch_dict['roi_features'].shape[-1]).contiguous()  # (BxN, 1, C)
 
         batch_size_rcnn = pooled_features.shape[0]
         pooled_features = pooled_features.permute(0, 2, 1).contiguous() # (BxN, C, 1)
 
         shared_features = self.shared_fc_layer(pooled_features.view(batch_size_rcnn, -1, 1))
-        
-        shared_features = self.combine_shared_features( shared_features.reshape(batch_dict['batch_size'], -1, shared_features.shape[1], shared_features.shape[2]), # think about contiguos later
-                                                        t_t1_matching, 
-                                                        t_t2_matching,
-                                                        batch_dict['batch_size'])
-        
         rcnn_cls = self.cls_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, 1 or 2)
         rcnn_reg = self.reg_layers(shared_features).transpose(1, 2).contiguous().squeeze(dim=1)  # (B, C)
 

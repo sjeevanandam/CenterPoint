@@ -73,7 +73,7 @@ class Matching(torch.nn.Module):
         
         
 
-    def forward(self, data, batch_size=1):
+    def forward(self, data, batch_size=1, out_type='roi'):
         """ Run SuperPoint (optionally) and SuperGlue
         SuperPoint is skipped if ['keypoints0', 'keypoints1'] exist in input
         Args:
@@ -84,8 +84,13 @@ class Matching(torch.nn.Module):
         
         for batch in range(batch_size):
             pred = {}
-            boxes1 = data[0]['rois'][batch]
-            boxes2 = data[1]['rois'][batch]
+            
+            if out_type == 'roi':
+                boxes1 = data[0]['rois'][batch]
+                boxes2 = data[1]['rois'][batch]
+            elif out_type == 'lidar':
+                boxes1 = data[0][0][batch]['box3d_lidar']
+                boxes2 = data[1][0][batch]['box3d_lidar']
             
             if len(boxes1) <= 1 or len(boxes2) <= 1:
                 # self.logger.info("Time elapsed for one item is (hh:mm:ss.ms) {}".format(time()-start_time))
@@ -105,8 +110,12 @@ class Matching(torch.nn.Module):
                 kps1 = kps1.reshape((1, -1, 3))
                 kps2 = kps2.reshape((1, -1, 3))
                 
-                scores1 = data[0]['roi_scores'][0].unsqueeze(1)
-                scores2 = data[1]['roi_scores'][0].unsqueeze(1)
+                if out_type == 'roi':
+                    scores1 = data[0]['roi_scores'][0].unsqueeze(1)
+                    scores2 = data[1]['roi_scores'][0].unsqueeze(1)
+                elif out_type == 'lidar':
+                    scores1 = data[0][0][batch]['scores'].unsqueeze(1)
+                    scores2 = data[1][0][batch]['scores'].unsqueeze(1)
                 
                 pred = {
                     'keypoints0': list(kps1),

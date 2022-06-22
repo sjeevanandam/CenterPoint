@@ -71,7 +71,7 @@ class WaymoDataset(PointCloudDataset):
 
     def get_sensor_data(self, idx):
         info = self._waymo_infos[idx]
-        print("Current ID IS!! {} and frame is {}".format(idx, info['token']))
+        # print("Current ID IS!! {} and frame is {}".format(idx, info['token']))
         res = {
             "lidar": {
                 "type": "lidar",

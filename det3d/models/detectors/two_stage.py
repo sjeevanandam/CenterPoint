@@ -6,6 +6,7 @@ import torch
 from torch import nn 
 from tools.utils import collate_intermediate_frame
 
+from models.matchingCP import Matching
 
 @DETECTORS.register_module
 class TwoStageDetector(BaseDetector):
@@ -40,6 +41,8 @@ class TwoStageDetector(BaseDetector):
 
         self.num_point = num_point
         self.use_final_feature = use_final_feature
+        
+        self.matching = Matching().eval().double()
 
     def combine_loss(self, one_stage_loss, roi_loss, tb_dict):
         one_stage_loss['loss'][0] += (roi_loss)
@@ -153,13 +156,28 @@ class TwoStageDetector(BaseDetector):
             pred_dicts.append(pred_dict)
 
         return pred_dicts 
-
+    
+    def combine_match_features(self, frame1, frame2, match_dict, batch_size):
+        
+        assert frame1['roi_features'].shape[0] == match_dict.shape[0]
+        
+        for batch in range(batch_size):
+            matches = match_dict[batch]['matches0']
+            valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
+            for m in valid:
+                frame1['roi_features'][batch][m] = torch.mean( torch.stack((frame1['roi_features'][batch][m], 
+                                                                            frame2['roi_features'][batch][matches[m]])), 
+                                                      dim=0)
+            
+        
+        return frame1
+        
     def features_from_centers(self, t, out, return_loss=True, **kwargs):
         if len(out) == 5:
-            one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
+            one_stage_pred, bev_feature, voxel_feature, final_feature, _ = out 
             t['voxel_feature'] = voxel_feature
         elif len(out) == 3:
-            one_stage_pred, bev_feature, one_stage_loss = out 
+            one_stage_pred, bev_feature, _ = out 
         else:
             raise NotImplementedError
 
@@ -195,10 +213,14 @@ class TwoStageDetector(BaseDetector):
         t1_data, t2_data = collate_intermediate_frame([example['t1'], example['t2']])
         
         t1_out = self.single_det.forward_two_stage(t1_data, 
-            return_loss, **kwargs)
+            return_loss=False, **kwargs)
         t2_out = self.single_det.forward_two_stage(t2_data, 
-            return_loss, **kwargs)
+            return_loss=False, **kwargs)
         
+        
+        example['batch_size'] = len(example['hm'])
+        t_t1_matching = self.matching([out, t1_out], example['batch_size'], out_type='lidar') # doing it before because after nearest map it messes it up
+        t_t2_matching = self.matching([out, t2_out], example['batch_size'], out_type='lidar')
         
         if len(out) == 5:
             one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
@@ -223,6 +245,7 @@ class TwoStageDetector(BaseDetector):
         features = [] 
 
         for module in self.second_stage:
+            # centers_vehicle_frame used just to compute the feature vector from bev map for the center
             feature = module.forward(example, centers_vehicle_frame, self.num_point)
             features.append(feature)
             # feature is two level list 
@@ -234,7 +257,15 @@ class TwoStageDetector(BaseDetector):
         t1_data = self.features_from_centers(t1_data, t1_out, return_loss, **kwargs)
         t2_data = self.features_from_centers(t2_data, t2_out, return_loss, **kwargs)
         
-        frame_history = [t1_data, t2_data]
+        example = self.combine_match_features(example, t1_data, t_t1_matching, example['batch_size'])
+        example = self.combine_match_features(example, t2_data, t_t2_matching, example['batch_size'])
+        
+        # combining features in two_stage itself so commenting
+        # frame_history = [t1_data, t2_data]
+        
+        # example['batch_size'] = len(example['rois'])
+        # t_t1_matching_roi = self.matching([example, frame_history[0]], example['batch_size']) # doing it beofre because after nearest map it messes it up
+        # t_t2_matching = self.matching([example, frame_history[1]], example['batch_size'])
         
         # final classification / regression 
         batch_dict = self.roi_head(example, frame_history, training=return_loss)

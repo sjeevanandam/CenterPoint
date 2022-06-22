@@ -22,7 +22,7 @@ def find_nearest(X, Y):
     torch.einsum('ij, ij ->i', X, X)[:, None] +    # = X ** 2        \
     torch.einsum('ij, ij ->i', Y, Y)          -    # + Y ** 2        \
     2 * X @ Y.T,                             # - 2 * X * Y
-    axis = 1)
+    axis = 0)
 
 class HilbertSort3D(object):
 

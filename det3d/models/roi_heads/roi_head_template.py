@@ -83,7 +83,7 @@ class RoIHeadTemplate(nn.Module):
 
 
         targets_dict['gt_of_rois'] = gt_of_rois
-        return targets_dict
+        return targets_dict, sampled_inds.detach().cpu().numpy()
 
     def get_box_reg_layer_loss(self, forward_ret_dict):
         loss_cfgs = self.model_cfg.LOSS_CONFIG
