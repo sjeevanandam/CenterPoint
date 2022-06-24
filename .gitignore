@@ -3,8 +3,8 @@
 **egg-info**
 **dist**
 **dump**
-**data**
-**data1**
+data/
+data1/
 tools/visualization/
 *.pyc
 venv/
@@ -18,3 +18,5 @@ venv/
 *.bin
 .vscode/
 apex/
+waymo-open-dataset/
+work_dirs*

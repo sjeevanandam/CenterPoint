@@ -5,8 +5,8 @@ from .. import builder
 import torch 
 from torch import nn 
 from tools.utils import collate_intermediate_frame
-import pickle
-# from models.matchingCP import Matching
+
+from models.matchingCP import Matching
 
 @DETECTORS.register_module
 class TwoStageDetector(BaseDetector):
@@ -42,7 +42,7 @@ class TwoStageDetector(BaseDetector):
         self.num_point = num_point
         self.use_final_feature = use_final_feature
         
-        # self.matching = Matching().eval().double()
+        self.matching = Matching().eval().double()
 
     def combine_loss(self, one_stage_loss, roi_loss, tb_dict):
         one_stage_loss['loss'][0] += (roi_loss)
@@ -170,10 +170,57 @@ class TwoStageDetector(BaseDetector):
             
         
         return frame1
+        
+    def features_from_centers(self, t, out, return_loss=True, **kwargs):
+        if len(out) == 5:
+            one_stage_pred, bev_feature, voxel_feature, final_feature, _ = out 
+            t['voxel_feature'] = voxel_feature
+        elif len(out) == 3:
+            one_stage_pred, bev_feature, _ = out 
+        else:
+            raise NotImplementedError
+
+        # N C H W -> N H W C 
+        if kwargs.get('use_final_feature', False):
+            t['bev_feature'] = final_feature.permute(0, 2, 3, 1).contiguous()
+        else:
+            t['bev_feature'] = bev_feature.permute(0, 2, 3, 1).contiguous()
+        
+        centers_vehicle_frame = self.get_box_center(one_stage_pred)
+
+        if self.roi_head.code_size == 7 and return_loss is True:
+            # drop velocity 
+            t['gt_boxes_and_cls'] = t['gt_boxes_and_cls'][:, :, [0, 1, 2, 3, 4, 5, 6, -1]]
+
+        features = [] 
+
+        for module in self.second_stage:
+            feature = module.forward(t, centers_vehicle_frame, self.num_point)
+            features.append(feature)
+            # feature is two level list 
+            # first level is number of two stage information streams
+            # second level is batch 
+
+        t = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=t, features=features)
+        
+        return t
 
     def forward(self, example, return_loss=True, **kwargs):
         out = self.single_det.forward_two_stage(example, 
             return_loss, **kwargs)
+
+        t1_data, t2_data = collate_intermediate_frame([example['t1'], example['t2']])
+        
+        t1_out = self.single_det.forward_two_stage(t1_data, 
+            return_loss=False, **kwargs)
+        t2_out = self.single_det.forward_two_stage(t2_data, 
+            return_loss=False, **kwargs)
+        
+        del t1_data, t2_data
+        
+        example['batch_size'] = len(example['hm'][0])
+        t_t1_matching = self.matching([out, t1_out], example['batch_size'], out_type='lidar') # doing it before because after nearest map it messes it up
+        t_t2_matching = self.matching([out, t2_out], example['batch_size'], out_type='lidar')
         
         if len(out) == 5:
             one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
@@ -191,7 +238,7 @@ class TwoStageDetector(BaseDetector):
         
         centers_vehicle_frame = self.get_box_center(one_stage_pred)
 
-        if self.roi_head.code_size == 7 and return_loss is True: 
+        if self.roi_head.code_size == 7 and return_loss is True:
             # drop velocity 
             example['gt_boxes_and_cls'] = example['gt_boxes_and_cls'][:, :, [0, 1, 2, 3, 4, 5, 6, -1]]
 
@@ -206,6 +253,12 @@ class TwoStageDetector(BaseDetector):
             # second level is batch 
 
         example = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=example, features=features)
+
+        t1_data = self.features_from_centers({}, t1_out, return_loss=False, **kwargs)
+        t2_data = self.features_from_centers({}, t2_out, return_loss=False, **kwargs)
+        
+        example = self.combine_match_features(example, t1_data, t_t1_matching, example['batch_size'])
+        example = self.combine_match_features(example, t2_data, t_t2_matching, example['batch_size'])
         
         # combining features in two_stage itself so commenting
         # frame_history = [t1_data, t2_data]
@@ -215,37 +268,11 @@ class TwoStageDetector(BaseDetector):
         # t_t2_matching = self.matching([example, frame_history[1]], example['batch_size'])
         
         # final classification / regression 
-        # batch_dict = self.roi_head(example, training=return_loss)
-        
-        example['batch_size'] = len(example['hm'][0])
-        
-        del example['points']
-        del example['voxels']
-        del example['hm']
-        del example['ind']
-        del example['mask']
-        del example['cat']
-        del example['shape']
-        del example['num_points']
-        del example['num_voxels']
-        del example['coordinates']
-        del example['anno_box']
-        del example['bev_feature']
-        for batch in range(example['batch_size']):
-            cur_frame = dict()
-            cur_frame.update({"gt_boxes_and_cls": example['gt_boxes_and_cls'][batch:batch+1]})
-            cur_frame.update({"rois": example['rois'][batch:batch+1]})
-            cur_frame.update({"roi_labels": example['rois'][batch:batch+1]})
-            cur_frame.update({"roi_scores": example['rois'][batch:batch+1]})
-            cur_frame.update({"roi_features": example['rois'][batch:batch+1]})
-            cur_frame.update({'has_class_labels': True})
-            cur_frame.update({"metadata": example["metadata"][batch]})
-            with open(str(example['metadata'][batch]['image_prefix']) +'/fs_features/' + example['metadata'][batch]['token'], 'wb') as f:
-                pickle.dump(cur_frame, f)
-            del cur_frame
-        if return_loss:
-            # roi_loss, tb_dict = self.roi_head.get_loss()
+        batch_dict = self.roi_head(example, training=return_loss)
 
-            return one_stage_loss
+        if return_loss:
+            roi_loss, tb_dict = self.roi_head.get_loss()
+
+            return self.combine_loss(one_stage_loss, roi_loss, tb_dict)
         else:
             return self.post_process(batch_dict)

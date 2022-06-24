@@ -59,7 +59,7 @@ model = dict(
     ],
     roi_head=dict(
         type="RoIHead",
-        input_channels=128*3*5*3,
+        input_channels=128*3*5,
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
             SHARED_FC=[1920, 256],
@@ -250,7 +250,7 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 6
+total_epochs = 1
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"

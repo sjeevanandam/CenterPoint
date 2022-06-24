@@ -12,7 +12,7 @@ from det3d import torchie
 from . import hooks
 from .checkpoint import load_checkpoint, save_checkpoint
 from .hooks import (
-    # CheckpointHook,
+    CheckpointHook,
     Hook,
     IterTimerHook,
     LrUpdaterHook,
@@ -411,8 +411,8 @@ class Trainer(object):
 
             if not isinstance(outputs, dict):
                 raise TypeError("batch_processor() must return a dict")
-            # if "log_vars" in outputs:
-                # self.log_buffer.update(outputs["log_vars"], outputs["num_samples"])
+            if "log_vars" in outputs:
+                self.log_buffer.update(outputs["log_vars"], outputs["num_samples"])
             self.outputs = outputs
             self.call_hook("after_train_iter")
             self._iter += 1
@@ -587,8 +587,8 @@ class Trainer(object):
         if lr_config is not None:
             assert self.lr_scheduler is None
             self.register_lr_hooks(lr_config)
-        # self.register_hook(self.build_hook(optimizer_config, OptimizerHook))
-        # self.register_hook(self.build_hook(checkpoint_config, CheckpointHook))
+        self.register_hook(self.build_hook(optimizer_config, OptimizerHook))
+        self.register_hook(self.build_hook(checkpoint_config, CheckpointHook))
         self.register_hook(IterTimerHook())
         if log_config is not None:
             self.register_logger_hooks(log_config)
