@@ -4,11 +4,7 @@ from .base import BaseDetector
 from .. import builder
 import torch 
 from torch import nn 
-from tools.utils import collate_intermediate_frame
-import pickle
-# from models.matchingCP import Matching
 
-# this for FS feature extraction
 @DETECTORS.register_module
 class TwoStageDetector(BaseDetector):
     def __init__(
@@ -42,8 +38,6 @@ class TwoStageDetector(BaseDetector):
 
         self.num_point = num_point
         self.use_final_feature = use_final_feature
-        
-        # self.matching = Matching().eval().double()
 
     def combine_loss(self, one_stage_loss, roi_loss, tb_dict):
         one_stage_loss['loss'][0] += (roi_loss)
@@ -157,31 +151,12 @@ class TwoStageDetector(BaseDetector):
             pred_dicts.append(pred_dict)
 
         return pred_dicts 
-    
-    def combine_match_features(self, frame1, frame2, match_dict, batch_size):
-        
-        assert frame1['roi_features'].shape[0] == match_dict.shape[0]
-        
-        for batch in range(batch_size):
-            matches = match_dict[batch]['matches0']
-            valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
-            frame1['roi_features'][batch][valid] = torch.mean( torch.stack((frame1['roi_features'][batch][valid], 
-                                                                            frame2['roi_features'][batch][matches[valid]])), 
-                                                                dim=0)
-            
-        
-        return frame1
 
-    def loss_to_cpu(self, losses):
-        for k,v in losses.items():
-            if k in ["loss", "loc_loss", "num_positive"]:
-                losses[k] = v[0].cpu()
-        return losses
-    
+
     def forward(self, example, return_loss=True, **kwargs):
         out = self.single_det.forward_two_stage(example, 
             return_loss, **kwargs)
-        
+
         if len(out) == 5:
             one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
             example['voxel_feature'] = voxel_feature
@@ -198,14 +173,13 @@ class TwoStageDetector(BaseDetector):
         
         centers_vehicle_frame = self.get_box_center(one_stage_pred)
 
-        if self.roi_head.code_size == 7 and return_loss is True: 
+        if self.roi_head.code_size == 7 and return_loss is True:
             # drop velocity 
             example['gt_boxes_and_cls'] = example['gt_boxes_and_cls'][:, :, [0, 1, 2, 3, 4, 5, 6, -1]]
 
         features = [] 
 
         for module in self.second_stage:
-            # centers_vehicle_frame used just to compute the feature vector from bev map for the center
             feature = module.forward(example, centers_vehicle_frame, self.num_point)
             features.append(feature)
             # feature is two level list 
@@ -213,47 +187,13 @@ class TwoStageDetector(BaseDetector):
             # second level is batch 
 
         example = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=example, features=features)
-        
-        # combining features in two_stage itself so commenting
-        # frame_history = [t1_data, t2_data]
-        
-        # example['batch_size'] = len(example['rois'])
-        # t_t1_matching_roi = self.matching([example, frame_history[0]], example['batch_size']) # doing it beofre because after nearest map it messes it up
-        # t_t2_matching = self.matching([example, frame_history[1]], example['batch_size'])
-        
-        # final classification / regression 
-        # batch_dict = self.roi_head(example, training=return_loss)
-        
-        example['batch_size'] = len(example['metadata'])
-        
-        del example['points']
-        del example['voxels']
-        del example['hm']
-        del example['ind']
-        del example['mask']
-        del example['cat']
-        del example['shape']
-        del example['num_points']
-        del example['num_voxels']
-        del example['coordinates']
-        del example['anno_box']
-        del example['bev_feature']
-        for batch in range(example['batch_size']):
-            cur_frame = dict()
-            cur_frame.update({"pred_len": one_stage_pred[batch].__len__()})
-            cur_frame.update({"gt_boxes_and_cls": example['gt_boxes_and_cls'][batch:batch+1].cpu().squeeze()})
-            cur_frame.update({"rois": example['rois'][batch:batch+1].cpu().squeeze()})
-            cur_frame.update({"roi_labels": example['roi_labels'][batch:batch+1].cpu().squeeze()})
-            cur_frame.update({"roi_scores": example['roi_scores'][batch:batch+1].cpu().squeeze()})
-            cur_frame.update({"roi_features": example['roi_features'][batch:batch+1].cpu().squeeze()})
-            cur_frame.update({'has_class_labels': True})
-            cur_frame.update({"metadata": example["metadata"][batch]})
-            with open(str(example['metadata'][batch]['image_prefix']) +'/fs_features/' + example['metadata'][batch]['token'], 'wb') as f:
-                pickle.dump(cur_frame, f)
-            del cur_frame
-        if return_loss:
-            # roi_loss, tb_dict = self.roi_head.get_loss()
 
-            return one_stage_loss
+        # final classification / regression 
+        batch_dict = self.roi_head(example, training=return_loss)
+
+        if return_loss:
+            roi_loss, tb_dict = self.roi_head.get_loss()
+
+            return self.combine_loss(one_stage_loss, roi_loss, tb_dict)
         else:
             return self.post_process(batch_dict)

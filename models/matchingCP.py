@@ -89,8 +89,8 @@ class Matching(torch.nn.Module):
                 boxes1 = data[0]['rois'][batch]
                 boxes2 = data[1]['rois'][batch]
             elif out_type == 'lidar':
-                boxes1 = data[0][0][batch]['box3d_lidar']
-                boxes2 = data[1][0][batch]['box3d_lidar']
+                boxes1 = data[0][0][batch]['box3d_lidar'] if ( len(data[0]) != 0 and len(data[0][0]) != 0) else []
+                boxes2 = data[1][0][batch]['box3d_lidar'] if ( len(data[1]) != 0 and len(data[1][0]) != 0 ) else []
             
             if len(boxes1) <= 1 or len(boxes2) <= 1:
                 # self.logger.info("Time elapsed for one item is (hh:mm:ss.ms) {}".format(time()-start_time))

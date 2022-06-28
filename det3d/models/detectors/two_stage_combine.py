@@ -218,7 +218,7 @@ class TwoStageDetector(BaseDetector):
         
         del t1_data, t2_data
         
-        example['batch_size'] = len(example['hm'][0])
+        example['batch_size'] = len(example['metadata'])
         t_t1_matching = self.matching([out, t1_out], example['batch_size'], out_type='lidar') # doing it before because after nearest map it messes it up
         t_t2_matching = self.matching([out, t2_out], example['batch_size'], out_type='lidar')
         
