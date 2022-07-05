@@ -158,7 +158,11 @@ def collate_kitti(batch_list, samples_per_gpu=1):
             ret[key] = res
         elif key == 'gt_boxes_and_cls':
             ret[key] = torch.tensor(np.stack(elems, axis=0))
+        elif key in [ 'rois', 'roi_labels', 'roi_scores', 'roi_features']:
+            ret[key] = torch.stack(elems, axis=0)
         else:
             ret[key] = np.stack(elems, axis=0)
 
     return ret
+        
+

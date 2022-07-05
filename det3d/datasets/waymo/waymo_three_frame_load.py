@@ -68,10 +68,9 @@ class WaymoDataset(PointCloudDataset):
             self.load_infos(self._info_path)
 
         return len(self._waymo_infos)
-
-    def get_sensor_data(self, idx):
-        info = self._waymo_infos[idx]
-        # print("Current ID IS!! {} and frame is {}".format(idx, info['token']))
+    
+    def get_res(self):
+        res = {}
         res = {
             "lidar": {
                 "type": "lidar",
@@ -82,13 +81,20 @@ class WaymoDataset(PointCloudDataset):
             "metadata": {
                 "image_prefix": self._root_path,
                 "num_point_features": self._num_point_features,
-                "token": info["token"],
+                "token": "",
             },
             "calib": None,
             "cam": {},
             "mode": "val" if self.test_mode else "train",
             "type": "WaymoDataset",
         }
+        return res
+    
+    def get_sensor_data(self, idx):
+        info = self._waymo_infos[idx]
+        # print("Current ID IS!! {} and frame is {}".format(idx, info['token']))
+        res = self.get_res()
+        res["metadata"]["token"] = info["token"]
 
         data, _ = self.pipeline(res, info)
 
@@ -102,9 +108,11 @@ class WaymoDataset(PointCloudDataset):
             t2_info = self._waymo_infos[idx+2]
             
             # use transforms on t1 first
+            res = self.get_res()
             res["metadata"]["token"] = t1_info["token"] #Just updating token
             t1_data, _ = self.pipeline(res, t1_info) #applying the transform
             # now on t2
+            res = self.get_res()
             res["metadata"]["token"] = t2_info["token"] #Just updating token
             t2_data, _ = self.pipeline(res, t2_info) #applying the transform
             
@@ -121,9 +129,11 @@ class WaymoDataset(PointCloudDataset):
             t2_info = self._waymo_infos[idx-2]
             
             # use transforms on t1 first
+            res = self.get_res()
             res["metadata"]["token"] = t1_info["token"] #Just updating token
             t1_data, _ = self.pipeline(res, t1_info) #applying the transform
             # now on t2
+            res = self.get_res()
             res["metadata"]["token"] = t2_info["token"] #Just updating token
             t2_data, _ = self.pipeline(res, t2_info) #applying the transform
             
@@ -140,9 +150,11 @@ class WaymoDataset(PointCloudDataset):
             t2_info = self._waymo_infos[idx+1]
             
             # use transforms on t1 first
+            res = self.get_res()
             res["metadata"]["token"] = t1_info["token"] #Just updating token
             t1_data, _ = self.pipeline(res, t1_info) #applying the transform
             # now on t2
+            res = self.get_res()
             res["metadata"]["token"] = t2_info["token"] #Just updating token
             t2_data, _ = self.pipeline(res, t2_info) #applying the transform
             

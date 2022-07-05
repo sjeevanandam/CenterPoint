@@ -43,7 +43,7 @@
 import torch
 from .superglueCP import SuperGlue
 from torch.autograd import Variable
-
+from det3d.models.utils.finetune_utils import FrozenBatchNorm2d
 import numpy as np
 
 class Matching(torch.nn.Module):
@@ -60,7 +60,7 @@ class Matching(torch.nn.Module):
                 'weights': 'indoor',
                 'sinkhorn_iterations': 20,
                 'match_threshold': 0.2,
-                'checkpoint': "/netscratch/jeevanandam/thesis/SuperGlue_Waymo/work_dirs/with_no_features_75_train_25_val/model_epoch_20.pth"
+                'checkpoint': "/home/jeevanandam/netscratch/thesis/SuperGlue_Waymo/work_dirs/with_no_features_75_train_25_val/model_epoch_20.pth"
             }
         }
         self.superglue = SuperGlue(config.get('superglue', {}))
@@ -143,3 +143,10 @@ class Matching(torch.nn.Module):
             pred = {**self.superglue(pred)}
             all_preds.append(pred)
         return np.array(all_preds)
+    
+    
+    def freeze(self):
+        for p in self.parameters():
+            p.requires_grad = False
+        FrozenBatchNorm2d.convert_frozen_batchnorm(self)
+        return self

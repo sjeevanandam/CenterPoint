@@ -6,7 +6,7 @@ import torch
 from torch import nn 
 from tools.utils import collate_intermediate_frame
 import pickle
-# from models.matchingCP import Matching
+from models.matchingCP import Matching
 
 # this for FS feature extraction
 @DETECTORS.register_module
@@ -43,7 +43,7 @@ class TwoStageDetector(BaseDetector):
         self.num_point = num_point
         self.use_final_feature = use_final_feature
         
-        # self.matching = Matching().eval().double()
+        self.matching = Matching().eval().double()
 
     def combine_loss(self, one_stage_loss, roi_loss, tb_dict):
         one_stage_loss['loss'][0] += (roi_loss)
@@ -178,10 +178,26 @@ class TwoStageDetector(BaseDetector):
                 losses[k] = v[0].cpu()
         return losses
     
+    def match_to_cpu(self, matches):
+        for k,v in matches.items():
+            matches[k] = v[0].detach().cpu()
+        return matches
+    
     def forward(self, example, return_loss=True, **kwargs):
         out = self.single_det.forward_two_stage(example, 
             return_loss, **kwargs)
+        t1_data, t2_data = collate_intermediate_frame([example['t1'], example['t2']])
         
+        t1_out = self.single_det.forward_two_stage(t1_data, 
+            return_loss=False, **kwargs)
+        t2_out = self.single_det.forward_two_stage(t2_data, 
+            return_loss=False, **kwargs)
+        
+        del t1_data, t2_data
+        
+        example['batch_size'] = len(example['metadata'])
+        t_t1_matching = self.matching([out, t1_out], example['batch_size'], out_type='lidar') # doing it before because after nearest map it messes it up
+        t_t2_matching = self.matching([out, t2_out], example['batch_size'], out_type='lidar')
         if len(out) == 5:
             one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
             example['voxel_feature'] = voxel_feature
@@ -240,7 +256,7 @@ class TwoStageDetector(BaseDetector):
         del example['bev_feature']
         for batch in range(example['batch_size']):
             cur_frame = dict()
-            cur_frame.update({"pred_len": one_stage_pred[batch].__len__()})
+            cur_frame.update({"pred_len": one_stage_pred[batch]['box3d_lidar'].__len__()})
             cur_frame.update({"gt_boxes_and_cls": example['gt_boxes_and_cls'][batch:batch+1].cpu().squeeze()})
             cur_frame.update({"rois": example['rois'][batch:batch+1].cpu().squeeze()})
             cur_frame.update({"roi_labels": example['roi_labels'][batch:batch+1].cpu().squeeze()})
@@ -248,6 +264,9 @@ class TwoStageDetector(BaseDetector):
             cur_frame.update({"roi_features": example['roi_features'][batch:batch+1].cpu().squeeze()})
             cur_frame.update({'has_class_labels': True})
             cur_frame.update({"metadata": example["metadata"][batch]})
+            cur_frame.update({'t_t1_matching':self.match_to_cpu(t_t1_matching[batch])})
+            cur_frame.update({'t_t2_matching':self.match_to_cpu(t_t2_matching[batch])})
+            cur_frame.update({"one_stage_loss": self.loss_to_cpu(one_stage_loss.copy())})
             with open(str(example['metadata'][batch]['image_prefix']) +'/fs_features/' + example['metadata'][batch]['token'], 'wb') as f:
                 pickle.dump(cur_frame, f)
             del cur_frame

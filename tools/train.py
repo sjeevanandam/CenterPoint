@@ -23,6 +23,7 @@ from det3d.torchie.apis import (
 )
 import torch.distributed as dist
 import subprocess
+import shutil
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a detector")
@@ -77,6 +78,8 @@ def main():
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
 
+    shutil.copy(args.config, cfg.work_dir)
+    
     distributed = False
     if "WORLD_SIZE" in os.environ:
         distributed = int(os.environ["WORLD_SIZE"]) > 1

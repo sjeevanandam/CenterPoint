@@ -45,6 +45,10 @@ class TwoStageDetector(BaseDetector):
         self.use_final_feature = use_final_feature
         
         self.matching = Matching().eval().double()
+        
+        # we train the model in two steps 
+        self.matching = self.matching.freeze()
+        print("Freeze Match Network Done")
 
     def combine_loss(self, one_stage_loss, roi_loss, tb_dict):
         one_stage_loss['loss'][0] += (roi_loss)
@@ -208,56 +212,56 @@ class TwoStageDetector(BaseDetector):
         return t
 
     def forward(self, example, return_loss=True, **kwargs):
-        out = self.single_det.forward_two_stage(example, 
-            return_loss, **kwargs)
+        # out = self.single_det.forward_two_stage(example, 
+        #     return_loss, **kwargs)
 
         t1_data, t2_data = collate_intermediate_frame([example['t1'], example['t2']])
         
-        t1_out = self.single_det.forward_two_stage(t1_data, 
-            return_loss=False, **kwargs)
-        t2_out = self.single_det.forward_two_stage(t2_data, 
-            return_loss=False, **kwargs)
+        # t1_out = self.single_det.forward_two_stage(t1_data, 
+        #     return_loss=False, **kwargs)
+        # t2_out = self.single_det.forward_two_stage(t2_data, 
+        #     return_loss=False, **kwargs)
         
-        del t1_data, t2_data
+        # del t1_data, t2_data
         
-        example['batch_size'] = len(example['metadata'])
-        t_t1_matching = self.matching([out, t1_out], example['batch_size'], out_type='lidar') # doing it before because after nearest map it messes it up
-        t_t2_matching = self.matching([out, t2_out], example['batch_size'], out_type='lidar')
+        # example['batch_size'] = len(example['metadata'])
+        # t_t1_matching = self.matching([out, t1_out], example['batch_size'], out_type='lidar') # doing it before because after nearest map it messes it up
+        # t_t2_matching = self.matching([out, t2_out], example['batch_size'], out_type='lidar')
         
-        if len(out) == 5:
-            one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
-            example['voxel_feature'] = voxel_feature
-        elif len(out) == 3:
-            one_stage_pred, bev_feature, one_stage_loss = out 
-        else:
-            raise NotImplementedError
+        # if len(out) == 5:
+        #     one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
+        #     example['voxel_feature'] = voxel_feature
+        # elif len(out) == 3:
+        #     one_stage_pred, bev_feature, one_stage_loss = out 
+        # else:
+        #     raise NotImplementedError
 
-        # N C H W -> N H W C 
-        if self.use_final_feature:
-            example['bev_feature'] = final_feature.permute(0, 2, 3, 1).contiguous()
-        else:
-            example['bev_feature'] = bev_feature.permute(0, 2, 3, 1).contiguous()
+        # # N C H W -> N H W C 
+        # if self.use_final_feature:
+        #     example['bev_feature'] = final_feature.permute(0, 2, 3, 1).contiguous()
+        # else:
+        #     example['bev_feature'] = bev_feature.permute(0, 2, 3, 1).contiguous()
         
-        centers_vehicle_frame = self.get_box_center(one_stage_pred)
+        # centers_vehicle_frame = self.get_box_center(one_stage_pred)
 
-        if self.roi_head.code_size == 7 and return_loss is True:
-            # drop velocity 
-            example['gt_boxes_and_cls'] = example['gt_boxes_and_cls'][:, :, [0, 1, 2, 3, 4, 5, 6, -1]]
+        # if self.roi_head.code_size == 7 and return_loss is True:
+        #     # drop velocity 
+        #     example['gt_boxes_and_cls'] = example['gt_boxes_and_cls'][:, :, [0, 1, 2, 3, 4, 5, 6, -1]]
 
-        features = [] 
+        # features = [] 
 
-        for module in self.second_stage:
-            # centers_vehicle_frame used just to compute the feature vector from bev map for the center
-            feature = module.forward(example, centers_vehicle_frame, self.num_point)
-            features.append(feature)
-            # feature is two level list 
-            # first level is number of two stage information streams
-            # second level is batch 
+        # for module in self.second_stage:
+        #     # centers_vehicle_frame used just to compute the feature vector from bev map for the center
+        #     feature = module.forward(example, centers_vehicle_frame, self.num_point)
+        #     features.append(feature)
+        #     # feature is two level list 
+        #     # first level is number of two stage information streams
+        #     # second level is batch 
 
-        example = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=example, features=features)
+        # example = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=example, features=features)
 
-        t1_data = self.features_from_centers({}, t1_out, return_loss=False, **kwargs)
-        t2_data = self.features_from_centers({}, t2_out, return_loss=False, **kwargs)
+        # t1_data = self.features_from_centers({}, t1_out, return_loss=False, **kwargs)
+        # t2_data = self.features_from_centers({}, t2_out, return_loss=False, **kwargs)
         
         example = self.combine_match_features(example, t1_data, t_t1_matching, example['batch_size'])
         example = self.combine_match_features(example, t2_data, t_t2_matching, example['batch_size'])
