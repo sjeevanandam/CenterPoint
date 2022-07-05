@@ -45,7 +45,7 @@ class WaymoDataset(PointCloudDataset):
         self.load_interval = load_interval 
         self.sample = sample
         self.nsweeps = nsweeps
-        self.fs_features_path = root_path+"/fs_features/"
+        self.fs_features_path = root_path+"/fs_features_new/"
         print("Using {} sweeps".format(nsweeps))
         super(WaymoDataset, self).__init__(
             root_path, info_path, pipeline, test_mode=test_mode, class_names=class_names

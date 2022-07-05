@@ -91,6 +91,9 @@ class Matching(torch.nn.Module):
             elif out_type == 'lidar':
                 boxes1 = data[0][0][batch]['box3d_lidar'] if ( len(data[0]) != 0 and len(data[0][0]) != 0) else []
                 boxes2 = data[1][0][batch]['box3d_lidar'] if ( len(data[1]) != 0 and len(data[1][0]) != 0 ) else []
+            elif out_type == 'roi_fs':
+                boxes1 = data[0]['rois'][batch][:data[0]['pred_len'][batch]]
+                boxes2 = data[1]['rois'][batch][:data[1]['pred_len'][batch]]
             
             if len(boxes1) <= 1 or len(boxes2) <= 1:
                 # self.logger.info("Time elapsed for one item is (hh:mm:ss.ms) {}".format(time()-start_time))
@@ -116,6 +119,9 @@ class Matching(torch.nn.Module):
                 elif out_type == 'lidar':
                     scores1 = data[0][0][batch]['scores'].unsqueeze(1)
                     scores2 = data[1][0][batch]['scores'].unsqueeze(1)
+                elif out_type == 'roi_fs':
+                    scores1 = data[0]['roi_scores'][batch][:data[0]['pred_len'][batch]].unsqueeze(1)
+                    scores2 = data[1]['roi_scores'][batch][:data[1]['pred_len'][batch]].unsqueeze(1)
                 
                 pred = {
                     'keypoints0': list(kps1),

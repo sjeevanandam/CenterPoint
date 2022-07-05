@@ -48,7 +48,11 @@ def example_to_device(example, device, non_blocking=False) -> dict:
             "cyv_num_voxels",
             "cyv_coordinates",
             "cyv_num_points",
-            "gt_boxes_and_cls"
+            "gt_boxes_and_cls",
+            'rois', 
+            'roi_labels', 
+            'roi_scores', 
+            'roi_features'
         ]:
             example_torch[k] = v.to(device, non_blocking=non_blocking)
         elif k == "calib":
@@ -56,6 +60,14 @@ def example_to_device(example, device, non_blocking=False) -> dict:
             for k1, v1 in v.items():
                 calib[k1] = v1.to(device, non_blocking=non_blocking)
             example_torch[k] = calib
+        # elif k == "one_stage_loss":
+        #     one_stage_loss = list()
+        #     for ls in v:
+        #         losses = {}
+        #         for k1, v1 in ls.items():
+        #             losses[k1] = v1[0].to(device, non_blocking=non_blocking)
+        #         one_stage_loss.append(losses)
+        #     example_torch[k] = one_stage_loss
         else:
             example_torch[k] = v
 

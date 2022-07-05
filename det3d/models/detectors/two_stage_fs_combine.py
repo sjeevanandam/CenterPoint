@@ -5,6 +5,7 @@ from .. import builder
 import torch 
 from torch import nn 
 from tools.utils import collate_intermediate_frame
+from collections import defaultdict
 
 from models.matchingCP import Matching
 
@@ -24,14 +25,14 @@ class TwoStageDetector(BaseDetector):
         **kwargs
     ):
         super(TwoStageDetector, self).__init__()
-        # self.single_det = builder.build_detector(first_stage_cfg, **kwargs)
+        self.single_det = builder.build_detector(first_stage_cfg, **kwargs)
         self.NMS_POST_MAXSIZE = NMS_POST_MAXSIZE
 
-        # if freeze:
-        #     print("Freeze First Stage Network")
-        #     # we train the model in two steps 
-        #     self.single_det = self.single_det.freeze()
-        # self.bbox_head = self.single_det.bbox_head
+        if freeze:
+            print("Freeze First Stage Network")
+            # we train the model in two steps 
+            self.single_det = self.single_det.freeze()
+        self.bbox_head = self.single_det.bbox_head
 
         self.second_stage = nn.ModuleList()
         # can be any number of modules 
@@ -46,7 +47,7 @@ class TwoStageDetector(BaseDetector):
         
         self.matching = Matching().eval().double()
         
-        # we train the model in two steps 
+        # Freeze matching model
         self.matching = self.matching.freeze()
         print("Freeze Match Network Done")
 
@@ -211,6 +212,13 @@ class TwoStageDetector(BaseDetector):
         
         return t
 
+    def get_one_stage_loss(self, loss_dict):
+        one_stage_loss = defaultdict(list)
+        loss = torch.tensor([])
+        for losses in loss_dict:
+            loss = torch.hstack((loss, losses['loss']))
+        one_stage_loss['loss'] = [torch.mean(loss.detach().to(torch.cuda.current_device(), non_blocking=False))] #CHECK detach
+        return one_stage_loss
     def forward(self, example, return_loss=True, **kwargs):
         # out = self.single_det.forward_two_stage(example, 
         #     return_loss, **kwargs)
@@ -222,11 +230,12 @@ class TwoStageDetector(BaseDetector):
         # t2_out = self.single_det.forward_two_stage(t2_data, 
         #     return_loss=False, **kwargs)
         
-        # del t1_data, t2_data
+        del example['t1']
+        del example['t2']
         
-        # example['batch_size'] = len(example['metadata'])
-        # t_t1_matching = self.matching([out, t1_out], example['batch_size'], out_type='lidar') # doing it before because after nearest map it messes it up
-        # t_t2_matching = self.matching([out, t2_out], example['batch_size'], out_type='lidar')
+        example['batch_size'] = len(example['metadata'])
+        t_t1_matching = self.matching([example, t1_data], example['batch_size'], out_type='roi_fs') # doing it before because after nearest map it messes it up
+        t_t2_matching = self.matching([example, t2_data], example['batch_size'], out_type='roi_fs')
         
         # if len(out) == 5:
         #     one_stage_pred, bev_feature, voxel_feature, final_feature, one_stage_loss = out 
@@ -262,7 +271,7 @@ class TwoStageDetector(BaseDetector):
 
         # t1_data = self.features_from_centers({}, t1_out, return_loss=False, **kwargs)
         # t2_data = self.features_from_centers({}, t2_out, return_loss=False, **kwargs)
-        
+        one_stage_loss = self.get_one_stage_loss(example['one_stage_loss'])
         example = self.combine_match_features(example, t1_data, t_t1_matching, example['batch_size'])
         example = self.combine_match_features(example, t2_data, t_t2_matching, example['batch_size'])
         

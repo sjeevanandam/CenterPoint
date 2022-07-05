@@ -78,7 +78,7 @@ def main():
     if args.resume_from is not None:
         cfg.resume_from = args.resume_from
 
-    shutil.copy(args.config, cfg.work_dir)
+    
     
     distributed = False
     if "WORLD_SIZE" in os.environ:
@@ -135,6 +135,7 @@ def main():
         os.makedirs(backup_dir, exist_ok=True)
         # os.system("cp -r * %s/" % backup_dir)
         # logger.info(f"Backup source files to {cfg.work_dir}/det3d")
+        shutil.copy(args.config, cfg.work_dir) #save config file
 
     # set random seeds
     if args.seed is not None:
