@@ -12,7 +12,8 @@ from .builder import (
     build_head,
     build_loss,
     build_neck,
-    build_roi_head
+    build_roi_head,
+    build_feature_head_module,
 )
 from .detectors import *  # noqa: F401,F403
 from .necks import *  # noqa: F401,F403

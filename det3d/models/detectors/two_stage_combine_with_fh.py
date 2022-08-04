@@ -7,6 +7,9 @@ from torch import nn
 from tools.utils import collate_intermediate_frame
 
 from models.matchingCP import Matching
+from det3d.models.utils.finetune_utils import FrozenBatchNorm2d
+import numpy as np
+from det3d.torchie.trainer import load_checkpoint
 
 @DETECTORS.register_module
 class TwoStageDetector(BaseDetector):
@@ -14,6 +17,7 @@ class TwoStageDetector(BaseDetector):
         self,
         first_stage_cfg,
         second_stage_modules,
+        feature_head,
         roi_head, 
         NMS_POST_MAXSIZE,
         num_point=1,
@@ -38,17 +42,29 @@ class TwoStageDetector(BaseDetector):
         for module in second_stage_modules:
             self.second_stage.append(builder.build_second_stage_module(module))
 
+        self.feature_head = builder.build_feature_head_module(feature_head)
+        
         self.roi_head = builder.build_roi_head(roi_head)
 
         self.num_point = num_point
         self.use_final_feature = use_final_feature
-        self.combine_type=combine_type
+        self.combine_type = combine_type
+        
+        load_checkpoint(self, "/home/jeevanandam/netscratch/thesis/CenterPoint_results/work_dirs/mini/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline/latest.pth", map_location="cpu", strict=False)
+        
+        self.roi_head = self.roi_head.freeze()
         
         self.matching = Matching().eval().double()
         # Freeze matching model
         self.matching = self.matching.freeze()
         print("Freeze Match Network Done")
 
+    def freeze(self):
+        for p in self.parameters():
+            p.requires_grad = False
+        FrozenBatchNorm2d.convert_frozen_batchnorm(self)
+        return self
+    
     def combine_loss(self, one_stage_loss, roi_loss, tb_dict):
         one_stage_loss['loss'][0] += (roi_loss)
 
@@ -162,36 +178,18 @@ class TwoStageDetector(BaseDetector):
 
         return pred_dicts 
     
-    def combine_match_features(self, frame1, frame2, match_dict, batch_size, type='mean'):
+    def combine_match_features(self, frame1, frame2, match_dict, batch_size):
         
         assert frame1['roi_features'].shape[0] == match_dict.shape[0]
         
-        if type == "mean":
-            for batch in range(batch_size):
-                matches = match_dict[batch]['matches0']
-                valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
-                frame1['roi_features'][batch][valid] = torch.mean( torch.stack((frame1['roi_features'][batch][valid], 
-                                                                                frame2['roi_features'][batch][matches[valid]])), 
-                                                                    dim=0)
-        elif type == "max":
-            for batch in range(batch_size):
-                matches = match_dict[batch]['matches0']
-                valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
-                frame1['roi_features'][batch][valid] = torch.max( torch.stack((frame1['roi_features'][batch][valid], 
-                                                                                frame2['roi_features'][batch][matches[valid]])), 
-                                                                    dim=0)[0]
-        elif type == "max_min":
-            for batch in range(batch_size):
-                matches = match_dict[batch]['matches0']
-                valid_max = ((match_dict[batch]['matching_scores0'] > -1) & (match_dict[batch]['matching_scores0'] > 0.5)).nonzero().squeeze()
-                frame1['roi_features'][batch][valid_max] = torch.max( torch.stack((frame1['roi_features'][batch][valid_max], 
-                                                                                frame2['roi_features'][batch][matches[valid_max]])), 
-                                                                    dim=0)[0]
-                valid_min = ((match_dict[batch]['matching_scores0'] > -1) & (match_dict[batch]['matching_scores0'] <= 0.5)).nonzero().squeeze()
-                frame1['roi_features'][batch][valid_min] = torch.min( torch.stack((frame1['roi_features'][batch][valid_min], 
-                                                                                frame2['roi_features'][batch][matches[valid_min]])), 
-                                                                    dim=0)[0]
+        for batch in range(batch_size):
+            matches = match_dict[batch]['matches0']
+            valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
+            frame1['roi_features'][batch][valid] = torch.max( torch.stack((frame1['roi_features'][batch][valid], 
+                                                                            frame2['roi_features'][batch][matches[valid]])), 
+                                                                dim=0)[0]
             
+        
         return frame1
         
     def features_from_centers(self, t, out, return_loss=True, **kwargs):
@@ -290,6 +288,8 @@ class TwoStageDetector(BaseDetector):
         # t_t1_matching_roi = self.matching([example, frame_history[0]], example['batch_size']) # doing it beofre because after nearest map it messes it up
         # t_t2_matching = self.matching([example, frame_history[1]], example['batch_size'])
         
+        example = self.feature_head(example)
+
         # final classification / regression 
         batch_dict = self.roi_head(example, training=return_loss)
 
