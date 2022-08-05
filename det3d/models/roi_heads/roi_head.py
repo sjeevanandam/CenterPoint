@@ -13,6 +13,8 @@ from det3d.core import box_torch_ops
 
 from ..registry import ROI_HEAD
 
+from det3d.models.utils.finetune_utils import FrozenBatchNorm2d
+
 @ROI_HEAD.register_module
 class RoIHead(RoIHeadTemplate):
     def __init__(self, input_channels, model_cfg, num_class=1, code_size=7, add_box_param=False, test_cfg=None):
@@ -108,4 +110,10 @@ class RoIHead(RoIHeadTemplate):
 
             self.forward_ret_dict = targets_dict
         
-        return batch_dict        
+        return batch_dict
+    
+    def freeze(self):
+        for p in self.parameters():
+            p.requires_grad = False
+        FrozenBatchNorm2d.convert_frozen_batchnorm(self)
+        return self

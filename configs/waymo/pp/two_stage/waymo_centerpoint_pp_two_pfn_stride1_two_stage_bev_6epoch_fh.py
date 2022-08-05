@@ -19,7 +19,7 @@ model = dict(
     type='TwoStageDetector',
     first_stage_cfg=dict(
         type="PointPillars",
-        pretrained='work_dirs_cluster_mini/waymo_centerpoint_pp_two_pfn_stride1_3x_partial/epoch_36.pth',
+        pretrained='work_dirs/mini/waymo_centerpoint_pp_two_pfn_stride1_3x_partial/epoch_36.pth',
         reader=dict(
             type="PillarFeatureNet",
             num_filters=[64, 64],
@@ -208,8 +208,8 @@ val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None
 
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=0,
+    samples_per_gpu=4,
+    workers_per_gpu=4,
     train=dict(
         type=dataset_type,
         root_path=data_root,
@@ -263,11 +263,11 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 1
+total_epochs = 6
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = './work_dirs/{}/'.format(__file__[__file__.rfind('/') + 1:-3])
+work_dir = './work_dirs/mini/{}_fh_case4/'.format(__file__[__file__.rfind('/') + 1:-3])
 load_from = None 
 resume_from = None  
 workflow = [('train', 1)]

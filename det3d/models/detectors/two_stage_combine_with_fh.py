@@ -50,7 +50,7 @@ class TwoStageDetector(BaseDetector):
         self.use_final_feature = use_final_feature
         self.combine_type = combine_type
         
-        load_checkpoint(self, "/home/jeevanandam/netscratch/thesis/CenterPoint_results/work_dirs/mini/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline/latest.pth", map_location="cpu", strict=False)
+        load_checkpoint(self, "/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/mini/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline/latest.pth", map_location="cpu", strict=False)
         
         self.roi_head = self.roi_head.freeze()
         
@@ -178,18 +178,36 @@ class TwoStageDetector(BaseDetector):
 
         return pred_dicts 
     
-    def combine_match_features(self, frame1, frame2, match_dict, batch_size):
+    def combine_match_features(self, frame1, frame2, match_dict, batch_size, type='mean'):
         
         assert frame1['roi_features'].shape[0] == match_dict.shape[0]
         
-        for batch in range(batch_size):
-            matches = match_dict[batch]['matches0']
-            valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
-            frame1['roi_features'][batch][valid] = torch.max( torch.stack((frame1['roi_features'][batch][valid], 
-                                                                            frame2['roi_features'][batch][matches[valid]])), 
-                                                                dim=0)[0]
+        if type == "mean":
+            for batch in range(batch_size):
+                matches = match_dict[batch]['matches0']
+                valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
+                frame1['roi_features'][batch][valid] = torch.mean( torch.stack((frame1['roi_features'][batch][valid], 
+                                                                                frame2['roi_features'][batch][matches[valid]])), 
+                                                                    dim=0)
+        elif type == "max":
+            for batch in range(batch_size):
+                matches = match_dict[batch]['matches0']
+                valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
+                frame1['roi_features'][batch][valid] = torch.max( torch.stack((frame1['roi_features'][batch][valid], 
+                                                                                frame2['roi_features'][batch][matches[valid]])), 
+                                                                    dim=0)[0]
+        elif type == "max_min":
+            for batch in range(batch_size):
+                matches = match_dict[batch]['matches0']
+                valid_max = ((match_dict[batch]['matching_scores0'] > -1) & (match_dict[batch]['matching_scores0'] > 0.5)).nonzero().squeeze()
+                frame1['roi_features'][batch][valid_max] = torch.max( torch.stack((frame1['roi_features'][batch][valid_max], 
+                                                                                frame2['roi_features'][batch][matches[valid_max]])), 
+                                                                    dim=0)[0]
+                valid_min = ((match_dict[batch]['matching_scores0'] > -1) & (match_dict[batch]['matching_scores0'] <= 0.5)).nonzero().squeeze()
+                frame1['roi_features'][batch][valid_min] = torch.min( torch.stack((frame1['roi_features'][batch][valid_min], 
+                                                                                frame2['roi_features'][batch][matches[valid_min]])), 
+                                                                    dim=0)[0]
             
-        
         return frame1
         
     def features_from_centers(self, t, out, return_loss=True, **kwargs):

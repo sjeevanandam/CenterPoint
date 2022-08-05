@@ -20,7 +20,7 @@ from .hooks import (
 from .log_buffer import LogBuffer
 from .parallel_test import parallel_test
 from .priority import Priority, get_priority
-from .trainer import Trainer
+from .trainer_orig import Trainer
 from .utils import (
     get_dist_info,
     get_host_info,
