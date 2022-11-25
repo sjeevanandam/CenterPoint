@@ -265,7 +265,8 @@ def train_detector(model, dataset, cfg, distributed=False, validate=False, logge
     total_steps = cfg.total_epochs * len(data_loaders[0])
     # print(f"total_steps: {total_steps}")
     if distributed:
-        model = apex.parallel.convert_syncbn_model(model)
+        # model = apex.parallel.convert_syncbn_model(model) ## BUGGY DOES NOT WORK
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     if cfg.lr_config.type == "one_cycle":
         # build trainer
         optimizer = build_one_cycle_optimizer(model, cfg.optimizer)
@@ -288,10 +289,13 @@ def train_detector(model, dataset, cfg, distributed=False, validate=False, logge
             # broadcast_buffers=False,
             find_unused_parameters=True,
         )
+        # for p,n in zip(model.module.roi_head.parameters(), model.module.roi_head.named_parameters()):
+        #     print("gpuu is {} and grad is {} with name {}".format(p.device, p.requires_grad, n[0]))
     else:
         model = model.cuda()
+        
 
-    logger.info(f"model structure: {model}")
+    # logger.info(f"model structure: {model}")
 
     trainer = Trainer(
         model, batch_processor, optimizer, lr_scheduler, cfg.work_dir, cfg.log_level

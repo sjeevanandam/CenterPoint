@@ -42,8 +42,8 @@ class RoIHeadTemplate(nn.Module):
 
     def assign_targets(self, batch_dict):
         batch_size = batch_dict['batch_size']
-        with torch.no_grad():
-            targets_dict = self.proposal_target_layer.forward(batch_dict)
+        # with torch.no_grad():
+        targets_dict = self.proposal_target_layer.forward(batch_dict)
 
         rois = targets_dict['rois']  # (B, N, 7 + C)
         gt_of_rois = targets_dict['gt_of_rois']  # (B, N, 7 + C + 1)

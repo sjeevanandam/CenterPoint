@@ -17,6 +17,7 @@ venv/
 *.zip
 *.bin
 .vscode/
-apex/
+.code-server
+apex
 waymo-open-dataset/
 work_dirs*
