@@ -92,8 +92,7 @@ model = dict(
     ),
     NMS_POST_MAXSIZE=500,
     num_point=5,
-    freeze=True,
-    combine_type='max'
+    freeze=True
 )
 
 assigner = dict(
@@ -251,11 +250,11 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 12
+total_epochs = 6
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = './work_dirs/mini/new/{}_full_fs_max_combine/'.format(__file__[__file__.rfind('/') + 1:-3])
+work_dir = './work_dirs/mini/new/{}_full_fs_baseline/'.format(__file__[__file__.rfind('/') + 1:-3])
 load_from = None 
 resume_from = None  
 workflow = [('train', 1)]

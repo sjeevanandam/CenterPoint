@@ -19,7 +19,7 @@ model = dict(
     type='TwoStageDetector',
     first_stage_cfg=dict(
         type="PointPillars",
-        pretrained='work_dirs/mini/waymo_centerpoint_pp_two_pfn_stride1_3x_partial/epoch_36.pth',
+        pretrained='work_dirs/waymo_centerpoint_pp_two_pfn_stride1_3x/epoch_36.pth',
         reader=dict(
             type="PillarFeatureNet",
             num_filters=[64, 64],
@@ -74,7 +74,7 @@ model = dict(
         input_channels=128*3*5,
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
-            SHARED_FC=[1920, 256],
+            SHARED_FC=[256, 256],
             CLS_FC=[256, 256],
             REG_FC=[256, 256],
             DP_RATIO=0.3,
@@ -105,7 +105,7 @@ model = dict(
     NMS_POST_MAXSIZE=500,
     num_point=5,
     freeze=True,
-    combine_type='mean'
+    combine_type='max_min'
 )
 
 assigner = dict(
@@ -209,7 +209,7 @@ test_anno = None
 
 data = dict(
     samples_per_gpu=4,
-    workers_per_gpu=4,
+    workers_per_gpu=8,
     train=dict(
         type=dataset_type,
         root_path=data_root,
@@ -263,11 +263,11 @@ log_config = dict(
 )
 # yapf:enable
 # runtime settings
-total_epochs = 6
+total_epochs = 12
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = './work_dirs/mini/{}_fh_case4/'.format(__file__[__file__.rfind('/') + 1:-3])
+work_dir = './work_dirs/mini/new/{}_full_fs_max_min_combine/'.format(__file__[__file__.rfind('/') + 1:-3])
 load_from = None 
 resume_from = None  
 workflow = [('train', 1)]

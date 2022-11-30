@@ -50,7 +50,7 @@ class TwoStageDetector(BaseDetector):
         self.use_final_feature = use_final_feature
         self.combine_type = combine_type
         
-        load_checkpoint(self, "/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/mini/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline/latest.pth", map_location="cpu", strict=False)
+        load_checkpoint(self, "/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/mini/new/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline_full_fs/latest.pth", map_location="cpu", strict=False)
         
         self.roi_head = self.roi_head.freeze()
         
@@ -306,7 +306,11 @@ class TwoStageDetector(BaseDetector):
         # t_t1_matching_roi = self.matching([example, frame_history[0]], example['batch_size']) # doing it beofre because after nearest map it messes it up
         # t_t2_matching = self.matching([example, frame_history[1]], example['batch_size'])
         
+        # frame_history = [t1_data, t2_data]
+        # matchings = [t_t1_matching, t_t2_matching]
         example = self.feature_head(example)
+        
+        
 
         # final classification / regression 
         batch_dict = self.roi_head(example, training=return_loss)
