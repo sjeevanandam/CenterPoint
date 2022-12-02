@@ -41,7 +41,7 @@
 # %BANNER_END%
 
 import torch
-from .superglueCP import SuperGlue
+from .superglueGNN import SuperGlue
 from torch.autograd import Variable
 from det3d.models.utils.finetune_utils import FrozenBatchNorm2d
 import numpy as np
@@ -51,11 +51,6 @@ class Matching(torch.nn.Module):
     def __init__(self, config={}):
         super().__init__()
         config = {
-            'superpoint': {
-                'nms_radius': 4,
-                'keypoint_threshold': 0.005,
-                'max_keypoints': 1024
-            },
             'superglue': {
                 'weights': 'indoor',
                 'sinkhorn_iterations': 20,
@@ -65,10 +60,6 @@ class Matching(torch.nn.Module):
         }
         self.superglue = SuperGlue(config.get('superglue', {}))
         self.desc_dim = self.superglue.config['descriptor_dim']
-        
-        trained = torch.load(config['superglue']['checkpoint'])
-        self.superglue.load_state_dict(trained)
-        print("Checkpoint {} with length {} loaded!!!".format(config['superglue']['checkpoint'], trained.__len__()))
         
         
         

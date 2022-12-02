@@ -93,7 +93,7 @@ model = dict(
     NMS_POST_MAXSIZE=500,
     num_point=5,
     freeze=True,
-    combine_type='max'
+    combine_type='max_min'
 )
 
 assigner = dict(
@@ -196,8 +196,8 @@ val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None
 
 data = dict(
-    samples_per_gpu=4,
-    workers_per_gpu=8,
+    samples_per_gpu=2,
+    workers_per_gpu=0,
     train=dict(
         type=dataset_type,
         root_path=data_root,
@@ -255,7 +255,7 @@ total_epochs = 12
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = './work_dirs/mini/new/{}_full_fs_max_combine/'.format(__file__[__file__.rfind('/') + 1:-3])
+work_dir = './work_dirs/mini/new/{}_full_fs_gnn/'.format(__file__[__file__.rfind('/') + 1:-3])
 load_from = None 
 resume_from = None  
 workflow = [('train', 1)]
