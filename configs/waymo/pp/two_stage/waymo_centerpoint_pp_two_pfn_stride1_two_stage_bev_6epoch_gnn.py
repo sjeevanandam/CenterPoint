@@ -57,6 +57,18 @@ model = dict(
             out_stride=1
         )
     ],
+    
+    feature_head=dict(
+        type="FeatureHead",
+        input_channels=128*3*5*2, #times two because t_t1,t_t2 t features are concatenated
+        model_cfg=dict(
+            CLASS_AGNOSTIC=True,
+            SHARED_FC=[1920, 1920],
+            DP_RATIO=0.3,
+        ),
+        code_size=7
+    ),
+    
     roi_head=dict(
         type="RoIHead",
         input_channels=128*3*5,
@@ -196,8 +208,8 @@ val_anno = "data/Waymo/infos_val_01sweeps_filter_zero_gt.pkl"
 test_anno = None
 
 data = dict(
-    samples_per_gpu=2,
-    workers_per_gpu=0,
+    samples_per_gpu=4,
+    workers_per_gpu=8,
     train=dict(
         type=dataset_type,
         root_path=data_root,

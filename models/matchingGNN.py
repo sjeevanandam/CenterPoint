@@ -77,8 +77,8 @@ class Matching(torch.nn.Module):
             pred = {}
             
             if out_type == 'roi':
-                boxes1 = data[0]['rois'][batch]
-                boxes2 = data[1]['rois'][batch]
+                boxes1 = data[0]['rois'][batch, :data[0]['orig_num_objs'][batch]]
+                boxes2 = data[1]['rois'][batch, :data[1]['orig_num_objs'][batch]]
             elif out_type == 'lidar':
                 boxes1 = data[0][0][batch]['box3d_lidar'] if ( len(data[0]) != 0 and len(data[0][0]) != 0) else []
                 boxes2 = data[1][0][batch]['box3d_lidar'] if ( len(data[1]) != 0 and len(data[1][0]) != 0 ) else []
@@ -105,8 +105,8 @@ class Matching(torch.nn.Module):
                 kps2 = kps2.reshape((1, -1, 3))
                 
                 if out_type == 'roi':
-                    scores1 = data[0]['roi_scores'][0].unsqueeze(1)
-                    scores2 = data[1]['roi_scores'][0].unsqueeze(1)
+                    scores1 = data[0]['roi_scores'][batch, :data[0]['orig_num_objs'][batch]].unsqueeze(1)
+                    scores2 = data[1]['roi_scores'][batch, :data[1]['orig_num_objs'][batch]].unsqueeze(1)
                 elif out_type == 'lidar':
                     scores1 = data[0][0][batch]['scores'].unsqueeze(1)
                     scores2 = data[1][0][batch]['scores'].unsqueeze(1)
@@ -114,15 +114,33 @@ class Matching(torch.nn.Module):
                     scores1 = data[0]['roi_scores'][batch][:data[0]['pred_len'][batch]].unsqueeze(1)
                     scores2 = data[1]['roi_scores'][batch][:data[1]['pred_len'][batch]].unsqueeze(1)
                 
-                pred = {
-                    'keypoints0': list(kps1),
-                    'keypoints1': list(kps2),
-                    'scores0': list(scores1),
-                    'scores1': list(scores2),
-                    # 'image0': image,
-                    # 'image1': warped,
-                    'file_name': "frame_pair[0][0]"
-                }
+                
+                
+                if out_type == 'roi':
+                    descriptors1 = data[0]['roi_features'][batch, :data[0]['orig_num_objs'][batch]]
+                    descriptors2 = data[1]['roi_features'][batch, :data[1]['orig_num_objs'][batch]]
+                    
+                    pred = {
+                        'keypoints0': list(kps1),
+                        'keypoints1': list(kps2),
+                        'descriptors0': list(descriptors1),
+                        'descriptors1': list(descriptors2),
+                        'scores0': list(scores1),
+                        'scores1': list(scores2),
+                        # 'image0': image,
+                        # 'image1': warped,
+                        'file_name': "frame_pair[0][0]"
+                    }
+                else:
+                    pred = {
+                        'keypoints0': list(kps1),
+                        'keypoints1': list(kps2),
+                        'scores0': list(scores1),
+                        'scores1': list(scores2),
+                        # 'image0': image,
+                        # 'image1': warped,
+                        'file_name': "frame_pair[0][0]"
+                    }
 
             # Batch all features
             # We should either have i) one image per batch, or
