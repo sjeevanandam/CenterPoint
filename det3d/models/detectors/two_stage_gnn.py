@@ -48,7 +48,7 @@ class TwoStageDetector(BaseDetector):
         # self.matching = self.matching.freeze()
         # print("Freeze Match Network Done")
 
-        self.feature_head = builder.build_feature_head_module(feature_head)
+        #self.feature_head = builder.build_feature_head_module(feature_head)
         self.roi_head = builder.build_roi_head(roi_head)
 
         self.num_point = num_point
@@ -326,7 +326,7 @@ class TwoStageDetector(BaseDetector):
         
         # # frame_history = [t1_data, t2_data]
         # # matchings = [t_t1_matching, t_t2_matching]
-        example = self.feature_head(example)
+        # example = self.feature_head(example)
         
         
 

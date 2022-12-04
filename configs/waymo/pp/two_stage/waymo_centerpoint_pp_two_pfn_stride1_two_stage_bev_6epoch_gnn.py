@@ -60,10 +60,11 @@ model = dict(
     
     feature_head=dict(
         type="FeatureHead",
-        input_channels=128*3*5*2, #times two because t_t1,t_t2 t features are concatenated
+        # input_channels=128*3*5*2, #times two because t_t1,t_t2 t features are concatenated
+        input_channels=128*3*2, #times two because t_t1,t_t2 t features are concatenated
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
-            SHARED_FC=[1920, 1920],
+            SHARED_FC=[256, 128],
             DP_RATIO=0.3,
         ),
         code_size=7
@@ -71,7 +72,7 @@ model = dict(
     
     roi_head=dict(
         type="RoIHead",
-        input_channels=128*3*5,
+        input_channels=128*3*2,
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
             SHARED_FC=[256, 256],
