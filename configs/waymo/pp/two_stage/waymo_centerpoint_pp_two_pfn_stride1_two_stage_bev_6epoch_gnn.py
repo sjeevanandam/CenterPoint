@@ -61,10 +61,10 @@ model = dict(
     feature_head=dict(
         type="FeatureHead",
         # input_channels=128*3*5*2, #times two because t_t1,t_t2 t features are concatenated
-        input_channels=128*3*2, #times two because t_t1,t_t2 t features are concatenated
+        input_channels=128*3*5,
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
-            SHARED_FC=[256, 128],
+            SHARED_FC=[256, 256],
             DP_RATIO=0.3,
         ),
         code_size=7
@@ -72,7 +72,7 @@ model = dict(
     
     roi_head=dict(
         type="RoIHead",
-        input_channels=128*3*2,
+        input_channels=256+64+64,
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
             SHARED_FC=[256, 256],
@@ -107,6 +107,15 @@ model = dict(
     num_point=5,
     freeze=True,
     combine_type='max_min'
+)
+
+superglue_config = dict(
+    descriptor_dim = 384,
+    weights = 'indoor',
+    keypoint_encoder = [64, 128],
+    GNN_layers = ['self', 'cross'] * 1,
+    sinkhorn_iterations = 100,
+    match_threshold = 0.2,
 )
 
 assigner = dict(

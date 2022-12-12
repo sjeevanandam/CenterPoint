@@ -27,6 +27,7 @@ class TwoStageDetector(BaseDetector):
         **kwargs
     ):
         super(TwoStageDetector, self).__init__()
+        self.superglue_config = kwargs.pop('superglue_config')
         self.single_det = builder.build_detector(first_stage_cfg, **kwargs)
         self.NMS_POST_MAXSIZE = NMS_POST_MAXSIZE
 
@@ -43,17 +44,19 @@ class TwoStageDetector(BaseDetector):
             self.second_stage.append(builder.build_second_stage_module(module))
 
 
-        self.matching = Matching().double().train()
+        self.feature_head = builder.build_feature_head_module(feature_head)
+
+        self.matching = Matching(self.superglue_config).train()
         # Freeze matching model
         # self.matching = self.matching.freeze()
         # print("Freeze Match Network Done")
 
-        #self.feature_head = builder.build_feature_head_module(feature_head)
         self.roi_head = builder.build_roi_head(roi_head)
 
         self.num_point = num_point
         self.use_final_feature = use_final_feature
         self.combine_type = combine_type
+        self.new_roi_input_channels = roi_head.input_channels
         
         # load_checkpoint(self, "/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/mini/new/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline_full_fs/latest.pth", map_location="cpu", strict=False)
         
@@ -217,17 +220,44 @@ class TwoStageDetector(BaseDetector):
         
         return t
     
-    def concat_gnn_features(self, example, t_t1, t_t2, batch_size, type='mean'):
-        
-        new_gnn_features = example['roi_features'].new_zeros((batch_size, 
-            self.NMS_POST_MAXSIZE, example['roi_features'].shape[-1]*2 
-        ))
-        for batch in range(batch_size):
-            A = t_t1[batch]['desc0']
-            B = t_t2[batch]['desc0']
-            new_gnn_features[batch, :example['orig_num_objs'][batch]] = torch.cat((A,B),1).permute(0,2,1).contiguous()
-        
-        example['roi_features'] = new_gnn_features
+    def concat_gnn_features(self, example, t_t1, t_t2, batch_size, type='default'):
+        """concatenate GNN features with the current examples features from First Stage
+            default: mean features from BEV FS and features of both `t` from `t_t1` and `t_t2`
+            case1  : 1920 original features from BEV FS sent through FH to get 256d vec. concat this with 2*128d of both `t` from `t_t1` and `t_t2` 
+
+        Args:
+            example (_type_): _description_
+            t_t1 (_type_): _description_
+            t_t2 (_type_): _description_
+            batch_size (_type_): _description_
+            type (str, optional): _description_. Defaults to 'default'.
+
+        Returns:
+            _type_: _description_
+        """
+        if type == 'default':
+            new_gnn_features = example['roi_features'].new_zeros((batch_size, 
+                self.NMS_POST_MAXSIZE, self.new_roi_input_channels 
+            ))
+            for batch in range(batch_size):
+                A = t_t1[batch]['desc0']
+                B = t_t2[batch]['desc0']
+                new_gnn_features[batch, :example['orig_num_objs'][batch]] = torch.cat((A,B),1).permute(0,2,1).contiguous()
+            
+            example['roi_features'] = new_gnn_features
+        elif type == 'case1':
+            new_gnn_features = example['roi_features'].new_zeros((batch_size, 
+                self.NMS_POST_MAXSIZE, self.new_roi_input_channels
+            ))
+            for batch in range(batch_size):
+                A = t_t1[batch]['desc0'].permute(0,2,1).squeeze(0)
+                B = t_t2[batch]['desc0'].permute(0,2,1).squeeze(0)
+                new_gnn_features[batch, :example['orig_num_objs'][batch]] = torch.cat((example['roi_features'][batch, :example['orig_num_objs'][batch]],
+                                                                                        A,
+                                                                                        B),
+                                                                                        1)
+            
+            example['roi_features'] = new_gnn_features
         
         return example
         
@@ -310,18 +340,17 @@ class TwoStageDetector(BaseDetector):
 
         example = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=example, features=features)
         
+        example = self.feature_head(example)
+        
         t1_data = self.features_from_centers({}, t1_out, return_loss=False, **kwargs)
         t2_data = self.features_from_centers({}, t2_out, return_loss=False, **kwargs)
 
-        # combining features in two_stage itself so commenting
-        frame_history = [t1_data, t2_data]
-        
         example['batch_size'] = len(example['rois'])
-        t_t1 = self.matching([example, frame_history[0]], example['batch_size']) # doing it beofre because after nearest map it messes it up
-        t_t2 = self.matching([example, frame_history[1]], example['batch_size'])
+        t_t1 = self.matching([example, t1_data], example['batch_size'])
+        t_t2 = self.matching([example, t2_data], example['batch_size'])
 
         
-        example = self.concat_gnn_features(example, t_t1, t_t2, example['batch_size'], type=self.combine_type)
+        example = self.concat_gnn_features(example, t_t1, t_t2, example['batch_size'], type='case1')
         # example = self.combine_match_features(example, t2_data, t_t2_matching, example['batch_size'], type=self.combine_type)
         
         # # frame_history = [t1_data, t2_data]

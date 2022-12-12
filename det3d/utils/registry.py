@@ -73,6 +73,10 @@ def build_from_cfg(cfg, registry, default_args=None):
         )
     if default_args is not None:
         for name, value in default_args.items():
-            args.setdefault(name, value)
-
+            if name != "superglue_config":
+                args.setdefault(name, value)
+            elif name == "superglue_config" and value != None:
+                args.setdefault(name, value)
+            else:
+                continue
     return obj_cls(**args)

@@ -50,5 +50,5 @@ def build_loss(cfg):
     return build(cfg, LOSSES)
 
 
-def build_detector(cfg, train_cfg=None, test_cfg=None):
-    return build(cfg, DETECTORS, dict(train_cfg=train_cfg, test_cfg=test_cfg))
+def build_detector(cfg, train_cfg=None, test_cfg=None, superglue_config=None):
+    return build(cfg, DETECTORS, dict(train_cfg=train_cfg, test_cfg=test_cfg, superglue_config=superglue_config))

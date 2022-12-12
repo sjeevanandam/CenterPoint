@@ -45,20 +45,21 @@ from .superglueGNN import SuperGlue
 from torch.autograd import Variable
 from det3d.models.utils.finetune_utils import FrozenBatchNorm2d
 import numpy as np
+import shutil
 
 class Matching(torch.nn.Module):
 
-    def __init__(self, config={}):
+    def __init__(self, superglue_config):
         super().__init__()
+        
+        shutil.copy("./models/superglueGNN.py", superglue_config['work_dir'])
         config = {
-            'superglue': {
                 'weights': 'indoor',
                 'sinkhorn_iterations': 20,
                 'match_threshold': 0.2,
                 'checkpoint': "/netscratch/jeevanandam/thesis/SuperGlue_Waymo/work_dirs/with_no_features_75_train_25_val/model_epoch_20.pth"
-            }
         }
-        self.superglue = SuperGlue(config.get('superglue', {}))
+        self.superglue = SuperGlue({**config, **superglue_config})
         self.desc_dim = self.superglue.config['descriptor_dim']
         
         
@@ -89,10 +90,10 @@ class Matching(torch.nn.Module):
             if len(boxes1) <= 1 or len(boxes2) <= 1:
                 # self.logger.info("Time elapsed for one item is (hh:mm:ss.ms) {}".format(time()-start_time))
                 pred = {
-                    'keypoints0': torch.zeros([0, 0, 2], dtype=torch.double),
-                    'keypoints1': torch.zeros([0, 0, 2], dtype=torch.double),
-                    'descriptors0': torch.zeros([0, 2], dtype=torch.double),
-                    'descriptors1': torch.zeros([0, 2], dtype=torch.double),
+                    'keypoints0': torch.zeros([0, 0, 2]),
+                    'keypoints1': torch.zeros([0, 0, 2]),
+                    'descriptors0': torch.zeros([0, 2]),
+                    'descriptors1': torch.zeros([0, 2]),
                     'file_name': "frame_pair[0]"
                 }
             else:

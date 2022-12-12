@@ -194,12 +194,12 @@ class SuperGlue(nn.Module):
 
     """
     default_config = {
-        'descriptor_dim': 384,
-        'weights': 'indoor',
-        'keypoint_encoder': [64, 128],
-        'GNN_layers': ['self', 'cross'] * 5,
-        'sinkhorn_iterations': 100,
-        'match_threshold': 0.2,
+        # 'descriptor_dim': 384,
+        # 'weights': 'indoor',
+        # 'keypoint_encoder': [64, 128],
+        # 'GNN_layers': ['self', 'cross'] * 1,
+        # 'sinkhorn_iterations': 100,
+        # 'match_threshold': 0.2,
     }
 
     def __init__(self, config):
@@ -221,8 +221,8 @@ class SuperGlue(nn.Module):
 
     def forward(self, data):
         """Run SuperGlue on a pair of keypoints and descriptors"""
-        desc0, desc1 = data['descriptors0'].double(), data['descriptors1'].double()
-        kpts0, kpts1 = data['keypoints0'].double(), data['keypoints1'].double()
+        desc0, desc1 = data['descriptors0'], data['descriptors1']
+        kpts0, kpts1 = data['keypoints0'], data['keypoints1']
 
         desc0 = desc0.transpose(0,1)
         desc1 = desc1.transpose(0,1)
@@ -233,11 +233,8 @@ class SuperGlue(nn.Module):
         if kpts0.shape[1] == 0 or kpts1.shape[1] == 0:  # no keypoints
             shape0, shape1 = kpts0.shape[:-1], kpts1.shape[:-1]
             return {
-                'matches0': kpts0.new_full(shape0, -1, dtype=torch.int)[0],
-                'matches1': kpts1.new_full(shape1, -1, dtype=torch.int)[0],
-                'matching_scores0': kpts0.new_zeros(shape0)[0],
-                'matching_scores1': kpts1.new_zeros(shape1)[0],
-                'skip_train': True
+                'desc0': desc0,
+                'desc1': desc1,
             }
 
         # file_name = data['file_name']
@@ -248,12 +245,13 @@ class SuperGlue(nn.Module):
         # kpts1 = normalize_keypoints(kpts1, data['image1'].shape)
 
         # Keypoint MLP encoder.
-        desc0 = desc0 + self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
-        desc1 = desc1 + self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
-        # desc0 = self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
-        # desc1 = self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
+        # desc0 = desc0 + self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
+        # desc1 = desc1 + self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
+        desc0 = self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
+        desc1 = self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
 
         # Multi-layer Transformer network.
+        # desc0, desc1 = self.gnn(desc0.unsqueeze(0), desc1.unsqueeze(0))
         desc0, desc1 = self.gnn(desc0, desc1)
 
         # Final MLP projection.
