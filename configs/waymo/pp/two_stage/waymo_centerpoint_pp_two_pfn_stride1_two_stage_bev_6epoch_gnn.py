@@ -19,7 +19,7 @@ model = dict(
     type='TwoStageDetector',
     first_stage_cfg=dict(
         type="PointPillars",
-        pretrained='work_dirs/waymo_centerpoint_pp_two_pfn_stride1_3x/epoch_36.pth',
+        pretrained=None, # doing it in second stage as it is btter to freeze everything. Take the frozen from entire dataset
         reader=dict(
             type="PillarFeatureNet",
             num_filters=[64, 64],
@@ -106,13 +106,13 @@ model = dict(
     NMS_POST_MAXSIZE=500,
     num_point=5,
     freeze=True,
-    combine_type='max_min'
+    pretrained='/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline_full_fs_new/latest.pth'
 )
 
 superglue_config = dict(
-    descriptor_dim = 384,
+    descriptor_dim = 64,
     weights = 'indoor',
-    keypoint_encoder = [64, 128],
+    keypoint_encoder = [32, 64],
     GNN_layers = ['self', 'cross'] * 1,
     sinkhorn_iterations = 100,
     match_threshold = 0.2,

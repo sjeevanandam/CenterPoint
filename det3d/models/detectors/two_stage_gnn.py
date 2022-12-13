@@ -22,7 +22,7 @@ class TwoStageDetector(BaseDetector):
         NMS_POST_MAXSIZE,
         num_point=1,
         freeze=False,
-        combine_type='mean',
+        pretrained=None,
         use_final_feature=False,
         **kwargs
     ):
@@ -31,10 +31,7 @@ class TwoStageDetector(BaseDetector):
         self.single_det = builder.build_detector(first_stage_cfg, **kwargs)
         self.NMS_POST_MAXSIZE = NMS_POST_MAXSIZE
 
-        if freeze:
-            print("Freeze First Stage Network")
-            # we train the model in two steps 
-            self.single_det = self.single_det.freeze()
+        
         self.bbox_head = self.single_det.bbox_head
 
         self.second_stage = nn.ModuleList()
@@ -43,31 +40,43 @@ class TwoStageDetector(BaseDetector):
         for module in second_stage_modules:
             self.second_stage.append(builder.build_second_stage_module(module))
 
+        self.roi_head = builder.build_roi_head(roi_head)
+        
+        
+        self.init_weights(pretrained=pretrained)
+        if freeze:
+            print("Freeze First Stage Network")
+            # we train the model in two steps 
+            self.single_det = self.single_det.freeze()
+        self.roi_head.cls_layers = self.freeze(self.roi_head.cls_layers)
+        self.roi_head.reg_layers = self.freeze(self.roi_head.reg_layers)
 
-        self.feature_head = builder.build_feature_head_module(feature_head)
-
+        self.num_point = num_point
+        self.use_final_feature = use_final_feature
+        self.new_roi_input_channels = roi_head.input_channels
+        
+        
+        self.feature_head = builder.build_feature_head_module(feature_head)        
         self.matching = Matching(self.superglue_config).train()
         # Freeze matching model
         # self.matching = self.matching.freeze()
         # print("Freeze Match Network Done")
-
-        self.roi_head = builder.build_roi_head(roi_head)
-
-        self.num_point = num_point
-        self.use_final_feature = use_final_feature
-        self.combine_type = combine_type
-        self.new_roi_input_channels = roi_head.input_channels
+             
         
-        # load_checkpoint(self, "/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/mini/new/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline_full_fs/latest.pth", map_location="cpu", strict=False)
-        
-        # self.roi_head = self.roi_head.freeze()        
-        
-
-    def freeze(self):
-        for p in self.parameters():
+    def init_weights(self, pretrained=None):
+        if pretrained is None:
+            return 
+        try:
+            load_checkpoint(self, pretrained, strict=False)
+            print("init weight from {}".format(pretrained))
+        except:
+            print("no pretrained model at {}".format(pretrained))
+            
+    def freeze(self, partial_model):
+        for p in partial_model.parameters():
             p.requires_grad = False
-        FrozenBatchNorm2d.convert_frozen_batchnorm(self)
-        return self
+        FrozenBatchNorm2d.convert_frozen_batchnorm(partial_model)
+        return partial_model
     
     def combine_loss(self, one_stage_loss, roi_loss, tb_dict):
         one_stage_loss['loss'][0] += (roi_loss)
