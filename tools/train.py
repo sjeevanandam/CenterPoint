@@ -142,6 +142,8 @@ def main():
         logger.info("Set random seed to {}".format(args.seed))
         set_random_seed(args.seed)
 
+    if 'superglue_config' not in cfg:
+        cfg.superglue_config = {}
     cfg.superglue_config['work_dir']=cfg.work_dir
     model = build_detector(cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg, superglue_config=cfg.superglue_config)
 

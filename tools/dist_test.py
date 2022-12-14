@@ -103,7 +103,10 @@ def main():
     logger.info("Distributed testing: {}".format(distributed))
     logger.info(f"torch.backends.cudnn.benchmark: {torch.backends.cudnn.benchmark}")
 
-    model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
+    if 'superglue_config' not in cfg:
+        cfg.superglue_config = {}
+    cfg.superglue_config['work_dir']=cfg.work_dir
+    model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg, superglue_config=cfg.superglue_config)
 
     if args.testset:
         print("Use Test Set")

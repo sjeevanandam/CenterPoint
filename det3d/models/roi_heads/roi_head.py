@@ -13,7 +13,7 @@ from det3d.core import box_torch_ops
 
 from ..registry import ROI_HEAD
 
-from det3d.models.utils.finetune_utils import FrozenBatchNorm2d, set_bn_eval
+from det3d.models.utils.finetune_utils import FrozenBatchNorm2d
 
 @ROI_HEAD.register_module
 class RoIHead(RoIHeadTemplate):
@@ -121,16 +121,16 @@ class RoIHead(RoIHeadTemplate):
     def freeze_cls(self):
         for p in self.cls_layers.parameters():
             p.requires_grad = False
-        for m in self.cls_layers.modules():
-            if isinstance(m, torch.nn.modules.batchnorm.BatchNorm1d):            
-                m.track_running_stats = False
-                m.eval()
+        # for m in self.cls_layers.modules():
+        #     if isinstance(m, torch.nn.modules.batchnorm.BatchNorm1d):            
+        #         m.track_running_stats = False
+        #         m.eval()
         return self
     def freeze_reg(self):
         for p in self.reg_layers.parameters():
             p.requires_grad = False
-        for m in self.reg_layers.modules():
-            if isinstance(m, torch.nn.modules.batchnorm.BatchNorm1d):            
-                m.track_running_stats = False
-                m.eval()
+        # for m in self.reg_layers.modules():
+        #     if isinstance(m, torch.nn.modules.batchnorm.BatchNorm1d):            
+        #         m.track_running_stats = False
+        #         m.eval()
         return self
