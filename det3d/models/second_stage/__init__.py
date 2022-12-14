@@ -1,2 +1,2 @@
-from .bird_eye_view_gnn import BEVFeatureExtractor
+from .bird_eye_view import BEVFeatureExtractor
 from .feature_head import FeatureHead
