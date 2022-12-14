@@ -48,16 +48,19 @@ class TwoStageDetector(BaseDetector):
             print("Freeze First Stage Network")
             # we train the model in two steps 
             self.single_det = self.single_det.freeze()
-        self.roi_head.cls_layers = self.freeze(self.roi_head.cls_layers)
-        self.roi_head.reg_layers = self.freeze(self.roi_head.reg_layers)
+        self.roi_head = self.roi_head.freeze_cls()
+        self.roi_head = self.roi_head.freeze_reg()
 
         self.num_point = num_point
         self.use_final_feature = use_final_feature
         self.new_roi_input_channels = roi_head.input_channels
         
         
-        self.feature_head = builder.build_feature_head_module(feature_head)        
+        self.feature_head = builder.build_feature_head_module(feature_head)
+        print('Feature Head initialization done!')
         self.matching = Matching(self.superglue_config).train()
+        print('AGNN initialization done!')
+    
         # Freeze matching model
         # self.matching = self.matching.freeze()
         # print("Freeze Match Network Done")

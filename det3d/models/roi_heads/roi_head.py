@@ -117,3 +117,14 @@ class RoIHead(RoIHeadTemplate):
             p.requires_grad = False
         FrozenBatchNorm2d.convert_frozen_batchnorm(self)
         return self
+
+    def freeze_cls(self):
+        for p in self.cls_layers.parameters():
+            p.requires_grad = False
+        # FrozenBatchNorm2d.convert_frozen_batchnorm(self.cls_layers)
+        return self
+    def freeze_reg(self):
+        for p in self.reg_layers.parameters():
+            p.requires_grad = False
+        # FrozenBatchNorm2d.convert_frozen_batchnorm(self.reg_layers)
+        return self
