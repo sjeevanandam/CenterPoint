@@ -106,6 +106,7 @@ model = dict(
     NMS_POST_MAXSIZE=500,
     num_point=5,
     freeze=True,
+    freeze_ts=False,
     pretrained='/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline_full_fs_new/latest.pth'
 )
 

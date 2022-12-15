@@ -22,6 +22,7 @@ class TwoStageDetector(BaseDetector):
         NMS_POST_MAXSIZE,
         num_point=1,
         freeze=False,
+        freeze_ts=False,
         pretrained=None,
         use_final_feature=False,
         **kwargs
@@ -48,8 +49,10 @@ class TwoStageDetector(BaseDetector):
             print("Freeze First Stage Network")
             # we train the model in two steps 
             self.single_det = self.single_det.freeze()
-        self.roi_head = self.roi_head.freeze_cls()
-        self.roi_head = self.roi_head.freeze_reg()
+        if freeze_ts:
+            print("Freeze Second Stage CLS and REG Networks")
+            self.roi_head = self.roi_head.freeze_cls()
+            self.roi_head = self.roi_head.freeze_reg()
 
         self.num_point = num_point
         self.use_final_feature = use_final_feature
