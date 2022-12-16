@@ -229,6 +229,7 @@ data = dict(
         nsweeps=nsweeps,
         class_names=class_names,
         pipeline=train_pipeline,
+        previous_frames=3,
     ),
     val=dict(
         type=dataset_type,
@@ -239,6 +240,7 @@ data = dict(
         nsweeps=nsweeps,
         class_names=class_names,
         pipeline=test_pipeline,
+        previous_frames=2,
     ),
     test=dict(
         type=dataset_type,
@@ -248,6 +250,7 @@ data = dict(
         nsweeps=nsweeps,
         class_names=class_names,
         pipeline=test_pipeline,
+        previous_frames=2,
     ),
 )
 
@@ -278,7 +281,7 @@ total_epochs = 12
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = './work_dirs/mini/new/{}_full_fs_gnn/'.format(__file__[__file__.rfind('/') + 1:-3])
+work_dir = './work_dirs/mini/full_ts/{}_full_fs_gnn/'.format(__file__[__file__.rfind('/') + 1:-3])
 load_from = None 
 resume_from = None  
 workflow = [('train', 1)]
