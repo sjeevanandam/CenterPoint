@@ -106,7 +106,7 @@ class WaymoDataset(PointCloudDataset):
         data['frame_history'] = []
         if int(frame) < self.previous_frames:
             
-            for t in range(1, int(frame)+1):
+            for t in range(1, self.previous_frames+1):
                 t_info = self._waymo_infos[idx]
 
                 # use transforms 
