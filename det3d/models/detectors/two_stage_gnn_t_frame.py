@@ -276,48 +276,45 @@ class TwoStageDetector(BaseDetector):
         
         return example
         
-        # assert frame1['roi_features'].shape[0] == match_dict.shape[0]
+    def concat_gnn_features_per_match(self, example, t_t1, batch_size):
+        """concatenate GNN features with the current examples features from First Stage
+        1920 original features from BEV FS sent through FH to get 256d vec. concat this with 2*128d of both `t` from `t_t1` and `t_t2` 
+
+        Args:
+            example (_type_): _description_
+            t_t1 (_type_): _description_
+            batch_size (_type_): _description_
+            type (str, optional): _description_. Defaults to 'default'.
+
+        Returns:
+            _type_: _description_
+        """
+
+        new_gnn_features = example['roi_features'].new_zeros((batch_size, 
+            self.NMS_POST_MAXSIZE, example['roi_features'].shape[2]+self.superglue_config['descriptor_dim']
+        ))
+        for batch in range(batch_size):
+            A = t_t1[batch]['desc0'].permute(0,2,1).squeeze(0)
+            new_gnn_features[batch, :example['orig_num_objs'][batch]] = torch.cat((example['roi_features'][batch, :example['orig_num_objs'][batch]],
+                                                                                    A),
+                                                                                    1)
         
-        # if type == "mean":
-        #     for batch in range(batch_size):
-        #         matches = match_dict[batch]['matches0']
-        #         valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
-        #         frame1['roi_features'][batch][valid] = torch.mean( torch.stack((frame1['roi_features'][batch][valid], 
-        #                                                                         frame2['roi_features'][batch][matches[valid]])), 
-        #                                                             dim=0)
-        # elif type == "max":
-        #     for batch in range(batch_size):
-        #         matches = match_dict[batch]['matches0']
-        #         valid = (match_dict[batch]['matches0'] > -1).nonzero().squeeze()
-        #         frame1['roi_features'][batch][valid] = torch.max( torch.stack((frame1['roi_features'][batch][valid], 
-        #                                                                         frame2['roi_features'][batch][matches[valid]])), 
-        #                                                             dim=0)[0]
-        # elif type == "max_min":
-        #     for batch in range(batch_size):
-        #         matches = match_dict[batch]['matches0']
-        #         valid_max = ((match_dict[batch]['matching_scores0'] > -1) & (match_dict[batch]['matching_scores0'] > 0.5)).nonzero().squeeze()
-        #         frame1['roi_features'][batch][valid_max] = torch.max( torch.stack((frame1['roi_features'][batch][valid_max], 
-        #                                                                         frame2['roi_features'][batch][matches[valid_max]])), 
-        #                                                             dim=0)[0]
-        #         valid_min = ((match_dict[batch]['matching_scores0'] > -1) & (match_dict[batch]['matching_scores0'] <= 0.5)).nonzero().squeeze()
-        #         frame1['roi_features'][batch][valid_min] = torch.min( torch.stack((frame1['roi_features'][batch][valid_min], 
-        #                                                                         frame2['roi_features'][batch][matches[valid_min]])), 
-        #                                                             dim=0)[0]
-            
-        return frame1
+        example['roi_features'] = new_gnn_features
+        
+        return example
 
     def forward(self, example, return_loss=True, **kwargs):
         out = self.single_det.forward_two_stage(example, 
             return_loss, **kwargs)
 
-        t1_data, t2_data = collate_intermediate_frame([example['t1'], example['t2']])
+        t_data = collate_intermediate_frame(example['frame_history'].T)
         
-        t1_out = self.single_det.forward_two_stage(t1_data, 
-            return_loss=False, **kwargs)
-        t2_out = self.single_det.forward_two_stage(t2_data, 
-            return_loss=False, **kwargs)
+        t_out_data = []
+        for t in t_data:
+            t_out_data.append(self.single_det.forward_two_stage(t, 
+                return_loss=False, **kwargs))
         
-        del t1_data, t2_data
+        del t_data
         
         # example['batch_size'] = len(example['metadata'])
         # t_t1_matching = self.matching([out, t1_out], example['batch_size'], out_type='lidar') # doing it before because after nearest map it messes it up
@@ -356,24 +353,14 @@ class TwoStageDetector(BaseDetector):
         example = self.reorder_first_stage_pred_and_feature(first_pred=one_stage_pred, example=example, features=features)
         
         example = self.feature_head(example)
-        
-        t1_data = self.features_from_centers({}, t1_out, return_loss=False, **kwargs)
-        t2_data = self.features_from_centers({}, t2_out, return_loss=False, **kwargs)
 
         example['batch_size'] = len(example['rois'])
-        t_t1 = self.matching([example, t1_data], example['batch_size'])
-        t_t2 = self.matching([example, t2_data], example['batch_size'])
 
-        
-        example = self.concat_gnn_features(example, t_t1, t_t2, example['batch_size'], type='case1')
-        # example = self.combine_match_features(example, t2_data, t_t2_matching, example['batch_size'], type=self.combine_type)
-        
-        # # frame_history = [t1_data, t2_data]
-        # # matchings = [t_t1_matching, t_t2_matching]
-        # example = self.feature_head(example)
-        
-        
-
+        for t_out in t_out_data:
+            t_t1 = self.matching([example, 
+                                self.features_from_centers({}, t_out, return_loss=False, **kwargs)], example['batch_size'])
+            example = self.concat_gnn_features_per_match(example, t_t1, example['batch_size'])
+       
         # final classification / regression 
         batch_dict = self.roi_head(example, training=return_loss)
 

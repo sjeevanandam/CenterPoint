@@ -30,9 +30,11 @@ class WaymoDataset(PointCloudDataset):
         sample=False,
         nsweeps=1,
         load_interval=1,
+        previous_frames=1,
         **kwargs,
     ):
-        self.load_interval = load_interval 
+        self.load_interval = load_interval
+        self.previous_frames = previous_frames 
         self.sample = sample
         self.nsweeps = nsweeps
         print("Using {} sweeps".format(nsweeps))
@@ -100,70 +102,31 @@ class WaymoDataset(PointCloudDataset):
 
         seq = info['token'].split('.')[0].split('_')[1]
         frame = info['token'].split('.')[0].split('_')[3]
-        if int(frame) == 0:
-            # data["frame_history"] = None
-            # return data
-            #previous frame and next frame
-            t1_info = self._waymo_infos[idx+1]
-            t2_info = self._waymo_infos[idx+2]
+
+        data['frame_history'] = []
+        if int(frame) < self.previous_frames:
             
-            # use transforms on t1 first
-            res = self.get_res()
-            res["metadata"]["token"] = t1_info["token"] #Just updating token
-            t1_data, _ = self.pipeline(res, t1_info) #applying the transform
-            # now on t2
-            res = self.get_res()
-            res["metadata"]["token"] = t2_info["token"] #Just updating token
-            t2_data, _ = self.pipeline(res, t2_info) #applying the transform
+            for t in range(1, int(frame)+1):
+                t_info = self._waymo_infos[idx]
+
+                # use transforms 
+                res = self.get_res()
+                res["metadata"]["token"] = t_info["token"] #Just updating token
+                t_data, _ = self.pipeline(res, t_info) #applying the transform
             
-            # data["frame_history"] = {
-            #     "t1": t1_data,
-            #     "t2": t2_data
-            # }
-            data["t1"] = t1_data
-            data["t2"] = t2_data
-            return data
-        elif int(frame) == int(self.last_tokens[seq]):
-            #previous frame and next frame
-            t1_info = self._waymo_infos[idx-1]
-            t2_info = self._waymo_infos[idx-2]
-            
-            # use transforms on t1 first
-            res = self.get_res()
-            res["metadata"]["token"] = t1_info["token"] #Just updating token
-            t1_data, _ = self.pipeline(res, t1_info) #applying the transform
-            # now on t2
-            res = self.get_res()
-            res["metadata"]["token"] = t2_info["token"] #Just updating token
-            t2_data, _ = self.pipeline(res, t2_info) #applying the transform
-            
-            # data["frame_history"] = {
-            #     "t1": t1_data,
-            #     "t2": t2_data
-            # }
-            data["t1"] = t1_data
-            data["t2"] = t2_data
+                data['frame_history'].append(t_data)
+
             return data
         else:
-            #previous frame and next frame
-            t1_info = self._waymo_infos[idx-1]
-            t2_info = self._waymo_infos[idx+1]
+            for t in range(1, int(self.previous_frames)+1):
+                t_info = self._waymo_infos[idx-t]
+
+                # use transforms 
+                res = self.get_res()
+                res["metadata"]["token"] = t_info["token"] #Just updating token
+                t_data, _ = self.pipeline(res, t_info) #applying the transform
             
-            # use transforms on t1 first
-            res = self.get_res()
-            res["metadata"]["token"] = t1_info["token"] #Just updating token
-            t1_data, _ = self.pipeline(res, t1_info) #applying the transform
-            # now on t2
-            res = self.get_res()
-            res["metadata"]["token"] = t2_info["token"] #Just updating token
-            t2_data, _ = self.pipeline(res, t2_info) #applying the transform
-            
-            # data["frame_history"] = {
-            #     "t1": t1_data,
-            #     "t2": t2_data
-            # }
-            data["t1"] = t1_data
-            data["t2"] = t2_data
+                data['frame_history'].append(t_data)
             return data
 
     def __getitem__(self, idx):
