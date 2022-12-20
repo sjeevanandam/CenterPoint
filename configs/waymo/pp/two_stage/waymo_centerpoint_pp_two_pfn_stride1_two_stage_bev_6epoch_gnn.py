@@ -9,9 +9,20 @@ tasks = [
 
 class_names = list(itertools.chain(*[t["class_names"] for t in tasks]))
 
+previous_frames=4
+
 # training and testing settings
 target_assigner = dict(
     tasks=tasks,
+)
+
+superglue_config = dict(
+    descriptor_dim = 128,
+    weights = 'indoor',
+    keypoint_encoder = [32, 64, 128],
+    GNN_layers = ['self', 'cross'] * 4,
+    sinkhorn_iterations = 100,
+    match_threshold = 0.2,
 )
 
 # model settings
@@ -72,7 +83,7 @@ model = dict(
     
     roi_head=dict(
         type="RoIHead",
-        input_channels=256+64+64,
+        input_channels=256+(superglue_config['descriptor_dim']*previous_frames),
         model_cfg=dict(
             CLASS_AGNOSTIC=True,
             SHARED_FC=[256, 256],
@@ -110,14 +121,7 @@ model = dict(
     pretrained='/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline_full_fs_new/latest.pth'
 )
 
-superglue_config = dict(
-    descriptor_dim = 64,
-    weights = 'indoor',
-    keypoint_encoder = [32, 64],
-    GNN_layers = ['self', 'cross'] * 1,
-    sinkhorn_iterations = 100,
-    match_threshold = 0.2,
-)
+
 
 assigner = dict(
     target_assigner=target_assigner,
@@ -229,7 +233,7 @@ data = dict(
         nsweeps=nsweeps,
         class_names=class_names,
         pipeline=train_pipeline,
-        previous_frames=3,
+        previous_frames=previous_frames,
     ),
     val=dict(
         type=dataset_type,
@@ -240,7 +244,7 @@ data = dict(
         nsweeps=nsweeps,
         class_names=class_names,
         pipeline=test_pipeline,
-        previous_frames=2,
+        previous_frames=previous_frames,
     ),
     test=dict(
         type=dataset_type,
@@ -250,7 +254,7 @@ data = dict(
         nsweeps=nsweeps,
         class_names=class_names,
         pipeline=test_pipeline,
-        previous_frames=2,
+        previous_frames=previous_frames,
     ),
 )
 
@@ -263,7 +267,7 @@ optimizer = dict(
     type="adam", amsgrad=0.0, wd=0.01, fixed_wd=True, moving_average=False,
 )
 lr_config = dict(
-    type="one_cycle", lr_max=0.003, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
+    type="one_cycle", lr_max=0.001, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4,
 )
 
 checkpoint_config = dict(interval=1)
@@ -281,7 +285,7 @@ total_epochs = 12
 device_ids = range(8)
 dist_params = dict(backend="nccl", init_method="env://")
 log_level = "INFO"
-work_dir = './work_dirs/mini/full_ts/{}_full_fs_gnn/'.format(__file__[__file__.rfind('/') + 1:-3])
+work_dir = './work_dirs/{}_fh_1920_to_256_4l_kenc_only_d_128_lr_0.001_4_prev_frames/'.format(__file__[__file__.rfind('/') + 1:-3])
 load_from = None 
 resume_from = None  
 workflow = [('train', 1)]
