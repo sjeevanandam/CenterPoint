@@ -23,6 +23,7 @@ superglue_config = dict(
     GNN_layers = ['self', 'cross'] * 4,
     sinkhorn_iterations = 100,
     match_threshold = 0.2,
+    with_desc = True
 )
 
 # model settings
@@ -118,6 +119,7 @@ model = dict(
     num_point=5,
     freeze=True,
     freeze_ts=False,
+    concat_gnn_features=True,
     pretrained='/netscratch/jeevanandam/thesis/CenterPoint_results/work_dirs/waymo_centerpoint_pp_two_pfn_stride1_two_stage_bev_6epoch_baseline_full_fs_new/latest.pth'
 )
 

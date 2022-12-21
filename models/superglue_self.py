@@ -245,10 +245,12 @@ class SuperGlue(nn.Module):
         # kpts1 = normalize_keypoints(kpts1, data['image1'].shape)
 
         # Keypoint MLP encoder.
-        # desc0 = desc0 + self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
-        # desc1 = desc1 + self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
-        desc0 = self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
-        # desc1 = self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
+        if self.config['with_desc']:
+            desc0 = desc0 + self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
+            # desc1 = desc1 + self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
+        else:
+            desc0 = self.kenc(kpts0, torch.transpose(data['scores0'], 0, 1))
+            # desc1 = self.kenc(kpts1, torch.transpose(data['scores1'], 0, 1))
 
         # Multi-layer Transformer network.
         # desc0, desc1 = self.gnn(desc0.unsqueeze(0), desc1.unsqueeze(0))

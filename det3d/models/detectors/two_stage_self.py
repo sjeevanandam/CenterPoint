@@ -25,6 +25,7 @@ class TwoStageDetector(BaseDetector):
         freeze_ts=False,
         pretrained=None,
         use_final_feature=False,
+        concat_gnn_features=True,
         **kwargs
     ):
         super(TwoStageDetector, self).__init__()
@@ -57,7 +58,7 @@ class TwoStageDetector(BaseDetector):
         self.num_point = num_point
         self.use_final_feature = use_final_feature
         self.new_roi_input_channels = roi_head.input_channels
-        
+        self.concat_gnn_features = concat_gnn_features
         
         self.feature_head = builder.build_feature_head_module(feature_head)
         print('Feature Head initialization done!')
@@ -215,6 +216,19 @@ class TwoStageDetector(BaseDetector):
         
         return example
 
+    def replace_roi_features_with_match(self, example, t_t1, batch_size):
+
+        new_gnn_features = example['roi_features'].new_zeros((example['batch_size'], 
+            self.NMS_POST_MAXSIZE, example['roi_features'].shape[2]
+        ))
+        for b in range(example['batch_size']):
+            new_gnn_features[b, :example['orig_num_objs'][b]] = t_t1[b]['desc0'].permute(0,2,1)
+                    
+        example['roi_features'] = new_gnn_features
+        
+        return example
+
+
     def forward(self, example, return_loss=True, **kwargs):
         out = self.single_det.forward_two_stage(example, 
             return_loss, **kwargs)
@@ -255,7 +269,11 @@ class TwoStageDetector(BaseDetector):
         
         example['batch_size'] = len(example['rois'])
         t_t = self.matching([example, None], example['batch_size'])
-        example = self.concat_gnn_features_per_match(example, t_t, example['batch_size'])
+        
+        if self.concat_gnn_features:
+            example = self.concat_gnn_features_per_match(example, t_t, example['batch_size'])
+        else:
+            example = self.replace_roi_features_with_match(example, t_t,  example['batch_size'])
 
 
         # final classification / regression 

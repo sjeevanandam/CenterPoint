@@ -25,6 +25,7 @@ class TwoStageDetector(BaseDetector):
         freeze_ts=False,
         pretrained=None,
         use_final_feature=False,
+        concat_gnn_features=True,
         **kwargs
     ):
         super(TwoStageDetector, self).__init__()
@@ -57,7 +58,7 @@ class TwoStageDetector(BaseDetector):
         self.num_point = num_point
         self.use_final_feature = use_final_feature
         self.new_roi_input_channels = roi_head.input_channels
-        
+        self.concat_gnn_features = concat_gnn_features
         
         self.feature_head = builder.build_feature_head_module(feature_head)
         print('Feature Head initialization done!')
@@ -276,7 +277,7 @@ class TwoStageDetector(BaseDetector):
         
         return example
         
-    def concat_gnn_features_per_match(self, example, t_t1, batch_size):
+    def concat_gnn_features_per_match(self, example, t_t1, example_roi_features, batch_size):
         """concatenate GNN features with the current examples features from First Stage
         1920 original features from BEV FS sent through FH to get 256d vec. concat this with 2*128d of both `t` from `t_t1` and `t_t2` 
 
@@ -290,19 +291,30 @@ class TwoStageDetector(BaseDetector):
             _type_: _description_
         """
 
-        new_gnn_features = example['roi_features'].new_zeros((batch_size, 
-            self.NMS_POST_MAXSIZE, example['roi_features'].shape[2]+self.superglue_config['descriptor_dim']
+        new_gnn_features = example_roi_features.new_zeros((batch_size, 
+            self.NMS_POST_MAXSIZE, example_roi_features.shape[2]+self.superglue_config['descriptor_dim']
         ))
         for batch in range(batch_size):
             A = t_t1[batch]['desc0'].permute(0,2,1).squeeze(0)
-            new_gnn_features[batch, :example['orig_num_objs'][batch]] = torch.cat((example['roi_features'][batch, :example['orig_num_objs'][batch]],
+            new_gnn_features[batch, :example['orig_num_objs'][batch]] = torch.cat((example_roi_features[batch, :example['orig_num_objs'][batch]],
                                                                                     A),
                                                                                     1)
+
+        return new_gnn_features
+
         
+    def replace_roi_features_with_match(self, example, t_t1, batch_size):
+
+        new_gnn_features = example['roi_features'].new_zeros((example['batch_size'], 
+            self.NMS_POST_MAXSIZE, example['roi_features'].shape[2]
+        ))
+        for b in range(example['batch_size']):
+            new_gnn_features[b, :example['orig_num_objs'][b]] = t_t1[b]['desc0'].permute(0,2,1)
+                    
         example['roi_features'] = new_gnn_features
         
         return example
-
+        
     def forward(self, example, return_loss=True, **kwargs):
         out = self.single_det.forward_two_stage(example, 
             return_loss, **kwargs)
@@ -356,11 +368,20 @@ class TwoStageDetector(BaseDetector):
 
         example['batch_size'] = len(example['rois'])
 
+        new_example_roi_features = torch.clone(example['roi_features']).detach()
         for t_out in t_out_data:
-            t_t1 = self.matching([example, 
-                                self.features_from_centers({}, t_out, return_loss=False, **kwargs)], example['batch_size'])
-            example = self.concat_gnn_features_per_match(example, t_t1, example['batch_size'])
+            t_out = self.features_from_centers({}, t_out, return_loss=False, **kwargs)
+            t_out = self.feature_head(t_out)
+            t_t1 = self.matching([example, t_out], example['batch_size'])
+            
+            if self.concat_gnn_features:
+                new_example_roi_features = self.concat_gnn_features_per_match(example, t_t1, new_example_roi_features, example['batch_size'])
+
+            if len(t_out_data)>1:
+                example = self.replace_roi_features_with_match(example, t_t1,  example['batch_size'])
        
+        if self.concat_gnn_features:
+            example['roi_features'] = new_example_roi_features
         # final classification / regression 
         batch_dict = self.roi_head(example, training=return_loss)
 
