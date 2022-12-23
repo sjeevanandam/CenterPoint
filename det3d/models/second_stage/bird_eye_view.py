@@ -35,7 +35,9 @@ class BEVFeatureExtractor(nn.Module):
             if num_point > 1:
                 section_size = len(feature_map) // num_point
                 feature_map = torch.cat([feature_map[i*section_size: (i+1)*section_size] for i in range(num_point)], dim=1)
-
+            if num_point == 25:
+                pool = nn.AvgPool1d(1, stride=5)
+                feature_map = pool(feature_map)
             ret_maps.append(feature_map)
 
         return ret_maps 

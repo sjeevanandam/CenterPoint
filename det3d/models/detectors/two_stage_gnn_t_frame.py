@@ -118,6 +118,36 @@ class TwoStageDetector(BaseDetector):
                     right_middle], dim=0)
 
                 centers.append(points)
+            elif self.num_point == 25:
+                center2d = box['box3d_lidar'][:, :2]
+                height = box['box3d_lidar'][:, 2:3]
+                dim2d = box['box3d_lidar'][:, 3:5]
+                rotation_y = box['box3d_lidar'][:, -1]
+
+                corners = box_torch_ops.center_to_corner_box2d(center2d, dim2d, rotation_y)
+
+                front_middle = torch.cat([(corners[:, 0] + corners[:, 1])/2, height], dim=-1)
+                back_middle = torch.cat([(corners[:, 2] + corners[:, 3])/2, height], dim=-1)
+                left_middle = torch.cat([(corners[:, 0] + corners[:, 3])/2, height], dim=-1)
+                right_middle = torch.cat([(corners[:, 1] + corners[:, 2])/2, height], dim=-1) 
+                
+                center3d = box['box3d_lidar'][:, :3]
+                dim3d = box['box3d_lidar'][:, 3:6]
+                
+                all_corners = box_torch_ops.center_to_corner_box3d(center3d, dim3d, rotation_y, origin=[0.5,0.5,0.5], axis=2)
+                
+                
+                points = torch.cat([box['box3d_lidar'][:, :3], front_middle, back_middle, left_middle, \
+                    right_middle], dim=0)
+
+                points = torch.cat([points,all_corners.reshape([-1,3])], dim=0)
+
+                edge_ids = [(1,0), (5,4), (2,3), (6,7), (1,2), (5,6), (0,3), (4,7), (1,5), (0,4), (2,6), (3,7)]
+
+                for edge in edge_ids:
+                    points = torch.cat([points, (all_corners[:, edge[0]] + all_corners[:, edge[1]])/2], dim=0)
+
+                centers.append(points)
             else:
                 raise NotImplementedError()
 
